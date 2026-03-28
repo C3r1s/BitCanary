@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Messenger.Client.Avalonia.Services;
 using Messenger.Client.Avalonia.ViewModels;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Messenger.Client.Avalonia;
@@ -35,6 +36,19 @@ public partial class App : Application
     {
         var services = new ServiceCollection();
 
+        var localAppData = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Messenger.Client.Avalonia");
+        Directory.CreateDirectory(localAppData);
+
+        services.AddDataProtection()
+            .SetApplicationName("Messenger.Client.Avalonia")
+            .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(localAppData, "dp-keys")))
+            .ProtectKeysWithDpapi();  // no-arg = CurrentUser scope
+
+        services.AddSingleton<IKeyStore, DpapiKeyStore>();
+        services.AddSingleton<StartupMigrationService>();
+
         services.AddSingleton<IClientSessionService, ClientSessionService>();
         services.AddSingleton<ILocalCacheService, LocalCacheService>();
         services.AddSingleton<IThemeService, ThemeService>();
@@ -43,6 +57,9 @@ public partial class App : Application
         services.AddSingleton<IRealtimeClient, RealtimeClient>();
         services.AddSingleton<MainWindowViewModel>();
 
-        return services.BuildServiceProvider();
+        var provider = services.BuildServiceProvider();
+        provider.GetRequiredService<StartupMigrationService>()
+            .RunAsync(CancellationToken.None).GetAwaiter().GetResult();
+        return provider;
     }
 }

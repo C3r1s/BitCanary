@@ -6,9 +6,9 @@ using Messenger.Shared.Contracts.Dtos;
 
 namespace Messenger.Client.Avalonia.Services;
 
-public sealed class LocalEnvelopeEncryptionService(ILocalCacheService localCacheService) : IEncryptionService
+public sealed class LocalEnvelopeEncryptionService(IKeyStore keyStore, ILocalCacheService localCacheService) : IEncryptionService
 {
-    private const string EnvelopeCacheKey = "encryption-keyring";
+    private const string EnvelopeCacheKey = "encryption-keyring-dpapi";
     private Dictionary<string, string>? _keyRing;
 
     public async Task<EncryptedMessageDraft> EncryptTextAsync(string plaintext, CancellationToken cancellationToken = default)
@@ -27,7 +27,8 @@ public sealed class LocalEnvelopeEncryptionService(ILocalCacheService localCache
         }
 
         var envelopeId = Guid.NewGuid().ToString("N");
-        _keyRing![envelopeId] = Convert.ToBase64String(key);
+        _keyRing![envelopeId] = keyStore.ProtectToBase64(key);
+        CryptographicOperations.ZeroMemory(key);
         await localCacheService.SaveAsync(EnvelopeCacheKey, _keyRing, cancellationToken);
 
         var payload = new byte[nonce.Length + tag.Length + ciphertext.Length];
@@ -47,26 +48,33 @@ public sealed class LocalEnvelopeEncryptionService(ILocalCacheService localCache
     {
         EnsureLoadedAsync(CancellationToken.None).GetAwaiter().GetResult();
 
-        if (_keyRing is null || !_keyRing.TryGetValue(message.KeyEnvelope, out var base64Key))
+        if (_keyRing is null || !_keyRing.TryGetValue(message.KeyEnvelope, out var base64Blob))
         {
             return message.EncryptionAlgorithm.StartsWith("plaintext", StringComparison.OrdinalIgnoreCase)
                 ? message.EncryptedPayload
                 : "[Encrypted message]";
         }
 
-        var payload = Convert.FromBase64String(message.EncryptedPayload);
-        var nonce = payload[..12];
-        var tag = payload[12..28];
-        var ciphertext = payload[28..];
-        var plaintext = new byte[ciphertext.Length];
-        var key = Convert.FromBase64String(base64Key);
-
-        using (var aesGcm = new AesGcm(key, tag.Length))
+        try
         {
-            aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
-        }
+            var payload = Convert.FromBase64String(message.EncryptedPayload);
+            var nonce = payload[..12];
+            var tag = payload[12..28];
+            var ciphertext = payload[28..];
+            var plaintext = new byte[ciphertext.Length];
+            var key = keyStore.UnprotectFromBase64(base64Blob);
 
-        return Encoding.UTF8.GetString(plaintext);
+            using (var aesGcm = new AesGcm(key, tag.Length))
+            {
+                aesGcm.Decrypt(nonce, ciphertext, tag, plaintext);
+            }
+
+            return Encoding.UTF8.GetString(plaintext);
+        }
+        catch (CryptographicException)
+        {
+            return "[Encrypted message]";
+        }
     }
 
     private async Task EnsureLoadedAsync(CancellationToken cancellationToken)

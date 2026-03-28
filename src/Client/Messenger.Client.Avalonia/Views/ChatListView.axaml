@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
+             x:Class="Messenger.Client.Avalonia.Views.ChatListView"
+             x:DataType="vm:ChatListViewModel">
+  <Border Classes="surface-card">
+    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="14">
+      <TextBlock Text="Chats" FontSize="22" FontWeight="SemiBold" />
+
+      <TextBox Grid.Row="1"
+               Watermark="Search conversations"
+               Text="{Binding SearchText, Mode=TwoWay}" />
+
+      <ListBox Grid.Row="2"
+               ItemsSource="{Binding Chats}"
+               SelectedItem="{Binding SelectedChat, Mode=TwoWay}">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:ChatListItemViewModel">
+            <Grid ColumnDefinitions="*,Auto" Margin="0,8">
+              <StackPanel Spacing="4">
+                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Subtitle}" Opacity="0.72" TextTrimming="CharacterEllipsis" />
+              </StackPanel>
+
+              <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="6">
+                <TextBlock Text="{Binding LastActivity}" HorizontalAlignment="Right" />
+                <Border Background="#2C7A7B"
+                        CornerRadius="999"
+                        Padding="8,2">
+                  <TextBlock Text="{Binding UnreadCount}" />
+                </Border>
+              </StackPanel>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+  </Border>
+</UserControl>

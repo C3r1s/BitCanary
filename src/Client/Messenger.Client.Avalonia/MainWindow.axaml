@@ -1,0 +1,88 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:views="using:Messenger.Client.Avalonia.Views"
+        xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
+        mc:Ignorable="d"
+        x:Class="Messenger.Client.Avalonia.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Width="1440"
+        Height="900"
+        MinWidth="900"
+        MinHeight="640"
+        Title="Messenger">
+
+  <Panel>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         LOGIN SCREEN  (shown when IsLoggedIn = false)
+    ═══════════════════════════════════════════════════════════════ -->
+    <Grid IsVisible="{Binding !IsLoggedIn}"
+          Background="{DynamicResource SystemAltHighColor}">
+      <views:LoginView DataContext="{Binding LoginVm}" />
+    </Grid>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         MAIN MESSENGER  (shown when IsLoggedIn = true)
+    ═══════════════════════════════════════════════════════════════ -->
+    <Grid RowDefinitions="Auto,*"
+          IsVisible="{Binding IsLoggedIn}">
+
+      <!-- Header bar -->
+      <Border Grid.Row="0"
+              Margin="20,20,20,14"
+              Padding="20,16"
+              CornerRadius="24"
+              Background="#102633">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="12">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Messenger" FontSize="24" FontWeight="SemiBold" Foreground="White" />
+            <TextBlock Text="{Binding StatusMessage}" Opacity="0.8" Foreground="White" />
+          </StackPanel>
+
+          <Border Grid.Column="1"
+                  VerticalAlignment="Center"
+                  Background="#17384C"
+                  CornerRadius="999"
+                  Padding="12,6">
+            <TextBlock Text="{Binding Settings.ConnectionStatus}" Foreground="White" />
+          </Border>
+
+          <Button Grid.Column="2"
+                  MinWidth="90"
+                  Command="{Binding RefreshCommand}"
+                  Content="Refresh" />
+
+          <Button Grid.Column="3"
+                  MinWidth="90"
+                  Command="{Binding LogoutCommand}"
+                  Content="Log out" />
+
+          <Button Grid.Column="4"
+                  MinWidth="70"
+                  Command="{Binding ExitCommand}"
+                  Content="Exit"
+                  Background="#5C1A1A" />
+        </Grid>
+      </Border>
+
+      <!-- 3-column layout: chat list | chat window + input | settings -->
+      <Grid Grid.Row="1"
+            Margin="20,0,20,20"
+            ColumnDefinitions="300,*,300"
+            ColumnSpacing="16">
+
+        <views:ChatListView DataContext="{Binding ChatList}" />
+
+        <Grid Grid.Column="1" RowDefinitions="*,Auto" RowSpacing="16">
+          <views:ChatWindowView DataContext="{Binding ChatWindow}" />
+          <views:MessageInputView Grid.Row="1" DataContext="{Binding MessageInput}" />
+        </Grid>
+
+        <views:SettingsView Grid.Column="2" DataContext="{Binding Settings}" />
+      </Grid>
+    </Grid>
+
+  </Panel>
+</Window>

@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/Backend/">
+    <Project Path="Backend/Messenger.Api/Messenger.Api.csproj" />
+    <Project Path="Backend/Messenger.Application/Messenger.Application.csproj" />
+    <Project Path="Backend/Messenger.Domain/Messenger.Domain.csproj" />
+    <Project Path="Backend/Messenger.Infrastructure/Messenger.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/Client/">
+    <Project Path="Client/Messenger.Client.Avalonia/Messenger.Client.Avalonia.csproj" />
+  </Folder>
+  <Folder Name="/Shared/">
+    <Project Path="Shared/Messenger.Shared.Contracts/Messenger.Shared.Contracts.csproj" />
+  </Folder>
+</Solution>

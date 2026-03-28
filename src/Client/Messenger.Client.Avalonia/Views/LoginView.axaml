@@ -1,0 +1,91 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
+             x:Class="Messenger.Client.Avalonia.Views.LoginView"
+             x:DataType="vm:LoginViewModel">
+
+  <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
+    <Border Classes="surface-card" Width="440" Padding="40,36">
+      <StackPanel Spacing="18">
+
+        <!-- Title -->
+        <StackPanel Spacing="6" HorizontalAlignment="Center">
+          <TextBlock Text="Sign In"
+                     FontSize="30" FontWeight="Bold"
+                     HorizontalAlignment="Center"
+                     IsVisible="{Binding !IsRegistering}" />
+          <TextBlock Text="Create Account"
+                     FontSize="30" FontWeight="Bold"
+                     HorizontalAlignment="Center"
+                     IsVisible="{Binding IsRegistering}" />
+          <TextBlock Text="Telegram-Inspired · End-to-End Encrypted"
+                     HorizontalAlignment="Center"
+                     Opacity="0.6" FontSize="12" />
+        </StackPanel>
+
+        <!-- Inputs -->
+        <TextBox Watermark="Username"
+                 Text="{Binding UserName, Mode=TwoWay}" />
+
+        <TextBox Watermark="Display Name"
+                 Text="{Binding DisplayName, Mode=TwoWay}"
+                 IsVisible="{Binding IsRegistering}" />
+
+        <TextBox Watermark="Password"
+                 PasswordChar="●"
+                 Text="{Binding Password, Mode=TwoWay}" />
+
+        <!-- Error banner -->
+        <Border Background="#3D1414" CornerRadius="8" Padding="12,8"
+                IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+          <TextBlock Text="{Binding ErrorMessage}"
+                     Foreground="#FF6B6B"
+                     TextWrapping="Wrap"
+                     FontSize="13" />
+        </Border>
+
+        <!-- Submit -->
+        <Button Content="Sign In"
+                IsVisible="{Binding !IsRegistering}"
+                Command="{Binding SubmitCommand}"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                IsEnabled="{Binding !IsBusy}"
+                MinHeight="42" />
+
+        <Button Content="Create Account"
+                IsVisible="{Binding IsRegistering}"
+                Command="{Binding SubmitCommand}"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                IsEnabled="{Binding !IsBusy}"
+                MinHeight="42" />
+
+        <!-- Toggle mode -->
+        <Button IsVisible="{Binding !IsRegistering}"
+                Command="{Binding ToggleModeCommand}"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                MinHeight="36">
+          <TextBlock Text="Don't have an account?  Register →" />
+        </Button>
+
+        <Button IsVisible="{Binding IsRegistering}"
+                Command="{Binding ToggleModeCommand}"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                MinHeight="36">
+          <TextBlock Text="Already have an account?  Sign in →" />
+        </Button>
+
+        <!-- Busy indicator -->
+        <TextBlock Text="Please wait…"
+                   HorizontalAlignment="Center"
+                   Opacity="0.65"
+                   IsVisible="{Binding IsBusy}" />
+
+      </StackPanel>
+    </Border>
+  </Grid>
+
+</UserControl>

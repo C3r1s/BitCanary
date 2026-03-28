@@ -1,0 +1,30 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Messenger.Client.Avalonia.App"
+             RequestedThemeVariant="Default">
+  <Application.Styles>
+    <FluentTheme />
+
+    <Style Selector="Border.surface-card">
+      <Setter Property="CornerRadius" Value="20" />
+      <Setter Property="Padding" Value="18" />
+      <Setter Property="Background" Value="{DynamicResource SystemControlAcrylicWindowBrush}" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+      <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style Selector="Border.message-bubble">
+      <Setter Property="CornerRadius" Value="18" />
+      <Setter Property="Padding" Value="12" />
+      <Setter Property="Margin" Value="0,0,0,10" />
+      <Setter Property="MaxWidth" Value="520" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Background" Value="{DynamicResource SystemAltMediumColor}" />
+    </Style>
+
+    <Style Selector="Border.message-bubble.outgoing">
+      <Setter Property="HorizontalAlignment" Value="Right" />
+      <Setter Property="Background" Value="#23534B" />
+    </Style>
+  </Application.Styles>
+</Application>

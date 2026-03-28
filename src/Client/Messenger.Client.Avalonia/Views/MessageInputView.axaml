@@ -1,0 +1,21 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
+             x:Class="Messenger.Client.Avalonia.Views.MessageInputView"
+             x:DataType="vm:MessageInputViewModel">
+  <Border Classes="surface-card" Padding="14">
+    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+      <TextBox AcceptsReturn="True"
+               MinHeight="64"
+               TextWrapping="Wrap"
+               Watermark="Write an encrypted message..."
+               Text="{Binding Text, Mode=TwoWay}" />
+
+      <Button Grid.Column="1"
+              MinWidth="110"
+              VerticalAlignment="Stretch"
+              Command="{Binding SendCommand}"
+              Content="Send" />
+    </Grid>
+  </Border>
+</UserControl>

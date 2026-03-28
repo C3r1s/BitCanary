@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
+             x:Class="Messenger.Client.Avalonia.Views.ChatWindowView"
+             x:DataType="vm:ChatWindowViewModel">
+  <Border Classes="surface-card">
+    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
+      <StackPanel Spacing="4">
+        <TextBlock Text="{Binding Title}" FontSize="24" FontWeight="SemiBold" />
+        <TextBlock Text="{Binding Subtitle}" Opacity="0.7" />
+      </StackPanel>
+
+      <TextBlock Grid.Row="1"
+                 Text="{Binding TypingStatus}"
+                 FontStyle="Italic"
+                 Opacity="0.8" />
+
+      <ScrollViewer Grid.Row="2" Name="MessagesScroll">
+        <ItemsControl ItemsSource="{Binding Messages}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:MessageItemViewModel">
+              <Border Classes="message-bubble"
+                      Classes.outgoing="{Binding IsOutgoing}">
+                <StackPanel Spacing="6">
+                  <TextBlock Text="{Binding SenderDisplayName}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Timestamp}" Opacity="0.7" HorizontalAlignment="Right" />
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Grid>
+  </Border>
+</UserControl>

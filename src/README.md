@@ -1,0 +1,42 @@
+# Messenger Solution Layout
+
+```text
+src/
+  Messenger.slnx
+  Backend/
+    Messenger.Api/
+      Controllers/
+      Extensions/
+      Hubs/
+      Services/
+    Messenger.Application/
+      Abstractions/
+      Auth/
+      Calls/
+      Chats/
+      Common/
+      Media/
+      Messages/
+      Users/
+    Messenger.Domain/
+      Abstractions/
+      Entities/
+      Enums/
+    Messenger.Infrastructure/
+      Authentication/
+      Persistence/
+        Configurations/
+      Services/
+  Client/
+    Messenger.Client.Avalonia/
+      Converters/
+      Models/
+      Services/
+      Themes/
+      ViewModels/
+      Views/
+  Shared/
+    Messenger.Shared.Contracts/
+      Dtos/
+      Realtime/
+```

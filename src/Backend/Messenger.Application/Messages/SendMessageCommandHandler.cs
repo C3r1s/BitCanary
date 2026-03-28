@@ -75,7 +75,8 @@ public sealed class SendMessageCommandHandler(
             KeyEnvelope = command.KeyEnvelope,
             MediaId = command.MediaId,
             ReplyToMessageId = command.ReplyToMessageId,
-            MetadataJson = command.MetadataJson
+            MetadataJson = command.MetadataJson,
+            ProtocolVersion = command.ProtocolVersion
         };
 
         dbContext.Messages.Add(message);

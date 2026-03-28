@@ -39,7 +39,8 @@ public static class MappingExtensions
             message.MediaId,
             message.ReplyToMessageId,
             message.MetadataJson,
-            message.CreatedAtUtc);
+            message.CreatedAtUtc,
+            message.ProtocolVersion);
 
     public static ChatSummaryDto ToDto(this Chat chat, MessageDto? lastMessage, int unreadCount) =>
         new(

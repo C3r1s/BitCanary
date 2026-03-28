@@ -22,6 +22,7 @@
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="10.0.0-preview.4.25258.110" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection" Version="10.0.5" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.5" />
+    <PackageReference Include="NSec.Cryptography" Version="25.4.0" />
   </ItemGroup>
 
   <ItemGroup>

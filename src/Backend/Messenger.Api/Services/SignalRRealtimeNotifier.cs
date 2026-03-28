@@ -32,4 +32,16 @@ public sealed class SignalRRealtimeNotifier(
 
     public Task BroadcastPresenceAsync(PresenceChangedDto presenceChanged, CancellationToken cancellationToken) =>
         hubContext.Clients.All.SendAsync(RealtimeEventNames.PresenceChanged, presenceChanged, cancellationToken);
+
+    public async Task SendOtpkSupplyLowAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var connections = connectionMappingService.GetConnections(userId);
+        if (connections.Count == 0)
+        {
+            return;
+        }
+
+        await hubContext.Clients.Clients(connections)
+            .SendAsync(RealtimeEventNames.OtpkSupplyLow, userId, cancellationToken);
+    }
 }

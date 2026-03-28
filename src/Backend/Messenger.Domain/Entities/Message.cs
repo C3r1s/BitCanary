@@ -20,5 +20,6 @@ public sealed class Message : Entity
     public Message? ReplyToMessage { get; set; }
     public ICollection<Message> Replies { get; set; } = new List<Message>();
     public string? MetadataJson { get; set; }
+    public ProtocolVersion ProtocolVersion { get; set; } = ProtocolVersion.LegacyAes;
     public DateTimeOffset CreatedAtUtc { get; set; } = DateTimeOffset.UtcNow;
 }

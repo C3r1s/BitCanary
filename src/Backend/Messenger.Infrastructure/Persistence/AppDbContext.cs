@@ -15,6 +15,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<UserSettings> UserSettings => Set<UserSettings>();
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
     public DbSet<CallSignalLog> CallSignalLogs => Set<CallSignalLog>();
+    public DbSet<UserKeyBundle> UserKeyBundles => Set<UserKeyBundle>();
+    public DbSet<OneTimePreKey> OneTimePreKeys => Set<OneTimePreKey>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

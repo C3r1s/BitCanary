@@ -11,4 +11,5 @@ public sealed record SendMessageCommand(
     string KeyEnvelope,
     Guid? MediaId,
     Guid? ReplyToMessageId,
-    string? MetadataJson);
+    string? MetadataJson,
+    ProtocolVersion ProtocolVersion = ProtocolVersion.LegacyAes);

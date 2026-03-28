@@ -9,4 +9,5 @@ public interface IRealtimeNotifier
     Task BroadcastTypingAsync(TypingIndicatorDto typingIndicator, CancellationToken cancellationToken);
     Task SendCallSignalAsync(CallSignalDto signal, CancellationToken cancellationToken);
     Task BroadcastPresenceAsync(PresenceChangedDto presenceChanged, CancellationToken cancellationToken);
+    Task SendOtpkSupplyLowAsync(Guid userId, CancellationToken cancellationToken);
 }

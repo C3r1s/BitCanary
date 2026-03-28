@@ -14,5 +14,7 @@ public interface IAppDbContext
     DbSet<UserSettings> UserSettings { get; }
     DbSet<MediaAsset> MediaAssets { get; }
     DbSet<CallSignalLog> CallSignalLogs { get; }
+    DbSet<UserKeyBundle> UserKeyBundles { get; }
+    DbSet<OneTimePreKey> OneTimePreKeys { get; }
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }

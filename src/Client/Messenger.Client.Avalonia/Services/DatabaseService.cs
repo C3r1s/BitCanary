@@ -10,7 +10,7 @@ namespace Messenger.Client.Avalonia.Services;
 /// </summary>
 public sealed class DatabaseService(IDataProtectionProvider dpProvider)
 {
-    private static readonly string LocalAppData = Path.Combine(
+    private static readonly string DefaultLocalAppData = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Messenger.Client.Avalonia");
 
@@ -18,14 +18,23 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
     private const string DbFileName = "messenger.db";
     private const string DbKeyPurpose = "Messenger.Db.v1";
 
-    public static string GetDbPath() => Path.Combine(LocalAppData, DbFileName);
+    public static string GetDbPath() => Path.Combine(DefaultLocalAppData, DbFileName);
 
-    public async Task<SqliteConnection> OpenAsync(string? dbPathOverride = null, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Opens (or creates) the SQLite database with WAL mode and applies the schema.
+    /// </summary>
+    /// <param name="localAppDataOverride">Override the local app data directory (for testing).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task<SqliteConnection> OpenAsync(
+        string? localAppDataOverride = null,
+        CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(LocalAppData);
-        await EnsureDbKeyAsync(cancellationToken);
+        var localAppData = localAppDataOverride ?? DefaultLocalAppData;
+        Directory.CreateDirectory(localAppData);
 
-        var dbPath = dbPathOverride ?? GetDbPath();
+        await EnsureDbKeyAsync(localAppData, cancellationToken);
+
+        var dbPath = Path.Combine(localAppData, DbFileName);
 
         // Do NOT use Cache=Shared — incompatible with WAL mode
         var conn = new SqliteConnection($"Data Source={dbPath}");
@@ -37,9 +46,9 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         return conn;
     }
 
-    private async Task EnsureDbKeyAsync(CancellationToken ct)
+    private async Task EnsureDbKeyAsync(string localAppData, CancellationToken ct)
     {
-        var keyFile = Path.Combine(LocalAppData, DbKeyFileName);
+        var keyFile = Path.Combine(localAppData, DbKeyFileName);
         var protector = dpProvider.CreateProtector(DbKeyPurpose);
 
         if (File.Exists(keyFile))

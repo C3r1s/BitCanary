@@ -1,3 +1,5 @@
+using Messenger.Shared.Contracts;
+
 namespace Messenger.Shared.Contracts.Dtos;
 
 public sealed record SendMessageRequest(
@@ -9,7 +11,8 @@ public sealed record SendMessageRequest(
     string KeyEnvelope,
     Guid? MediaId,
     Guid? ReplyToMessageId,
-    string? MetadataJson);
+    string? MetadataJson,
+    ProtocolVersion ProtocolVersion = ProtocolVersion.LegacyAes);
 
 public sealed record MessageDto(
     Guid Id,
@@ -23,7 +26,8 @@ public sealed record MessageDto(
     Guid? MediaId,
     Guid? ReplyToMessageId,
     string? MetadataJson,
-    DateTimeOffset CreatedAtUtc);
+    DateTimeOffset CreatedAtUtc,
+    ProtocolVersion ProtocolVersion = ProtocolVersion.LegacyAes);
 
 public sealed record TypingIndicatorDto(
     Guid ChatId,

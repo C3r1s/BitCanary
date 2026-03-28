@@ -1,4 +1,5 @@
 using Messenger.Domain.Entities;
+using Messenger.Shared.Contracts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -23,6 +24,7 @@ public sealed class MessageConfiguration : IEntityTypeConfiguration<Message>
         builder.Property(x => x.ReplyToMessageId).HasColumnName("reply_to_message_id");
         builder.Property(x => x.MetadataJson).HasColumnName("metadata_json").HasColumnType("jsonb");
         builder.Property(x => x.CreatedAtUtc).HasColumnName("created_at_utc").IsRequired();
+        builder.Property(x => x.ProtocolVersion).HasColumnName("protocol_version").HasDefaultValue(ProtocolVersion.LegacyAes).IsRequired();
 
         builder.HasIndex(x => new { x.ChatId, x.CreatedAtUtc });
         builder.HasIndex(x => new { x.ChatId, x.SenderId, x.ClientMessageId }).IsUnique();

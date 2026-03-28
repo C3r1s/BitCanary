@@ -117,7 +117,7 @@ public sealed class KeyBundleService(
             opk?.Id);
     }
 
-    public async Task ReplenishOpksAsync(Guid userId, OtpkReplenishRequest request, CancellationToken cancellationToken)
+    public async Task<OtpkReplenishResponse> ReplenishOpksAsync(Guid userId, OtpkReplenishRequest request, CancellationToken cancellationToken)
     {
         if (request.PreKeys.Length > MaxOpkBatchSize)
             throw new AppException($"OPK batch size exceeds maximum of {MaxOpkBatchSize}.", HttpStatusCode.BadRequest);
@@ -128,15 +128,21 @@ public sealed class KeyBundleService(
         if (!bundleExists)
             throw new AppException("No bundle found for the specified device.", HttpStatusCode.NotFound);
 
+        var entities = new List<OneTimePreKey>(request.PreKeys.Length);
         foreach (var preKey in request.PreKeys)
         {
-            dbContext.OneTimePreKeys.Add(new OneTimePreKey
+            var entity = new OneTimePreKey
             {
                 UserId = userId,
                 PublicKey = preKey
-            });
+            };
+            entities.Add(entity);
+            dbContext.OneTimePreKeys.Add(entity);
         }
 
         await dbContext.SaveChangesAsync(cancellationToken);
+
+        var assignedIds = entities.Select(e => e.Id).ToArray();
+        return new OtpkReplenishResponse(assignedIds);
     }
 }

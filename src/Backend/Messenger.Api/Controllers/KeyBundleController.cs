@@ -42,7 +42,7 @@ public sealed class KeyBundleController(
     public async Task<IActionResult> ReplenishOpks(OtpkReplenishRequest request, CancellationToken cancellationToken)
     {
         var userId = currentUser.RequireUserId();
-        await keyBundleService.ReplenishOpksAsync(userId, request, cancellationToken);
-        return NoContent();
+        var response = await keyBundleService.ReplenishOpksAsync(userId, request, cancellationToken);
+        return Ok(response);
     }
 }

@@ -22,3 +22,5 @@ public sealed record OtpkReplenishRequest(
 
 public sealed record BundleUploadResponse(
     Guid DeviceId);
+
+public sealed record OtpkReplenishResponse(Guid[] AssignedIds);

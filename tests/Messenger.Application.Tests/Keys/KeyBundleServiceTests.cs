@@ -159,10 +159,15 @@ public sealed class KeyBundleServiceTests
 
         var preKeys = Enumerable.Range(0, 5).Select(i => new byte[] { (byte)i }).ToArray();
         var request = new OtpkReplenishRequest(bundle.DeviceId, preKeys);
-        await svc.ReplenishOpksAsync(userId, request, CancellationToken.None);
+        var result = await svc.ReplenishOpksAsync(userId, request, CancellationToken.None);
 
         var count = await db.OneTimePreKeys.CountAsync(x => x.UserId == userId);
         Assert.Equal(5, count);
+
+        // Verify assigned IDs are returned
+        Assert.Equal(5, result.AssignedIds.Length);
+        Assert.All(result.AssignedIds, id => Assert.NotEqual(Guid.Empty, id));
+        Assert.Equal(result.AssignedIds.Length, result.AssignedIds.Distinct().Count());
     }
 
     [Fact]

@@ -1,7 +1,11 @@
+using System.Net.Http;
+using Avalonia;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Messenger.Client.Avalonia.Services;
+using Messenger.Client.Avalonia.Services.Crypto;
 using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
 using Messenger.Shared.Contracts.Realtime;
@@ -16,6 +20,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly IEncryptionService _encryptionService;
     private readonly IThemeService _themeService;
     private readonly IClientSessionService _sessionService;
+    private readonly KeyPublicationService _keyPublicationService;
     private readonly Dictionary<Guid, List<MessageDto>> _messageCache = new();
 
     [ObservableProperty]
@@ -30,6 +35,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     /// <summary>True once the user has authenticated and the main UI should be shown.</summary>
     [ObservableProperty]
     private bool _isLoggedIn;
+
+    [ObservableProperty]
+    private bool _isMigrating;
 
     public ChatListViewModel ChatList { get; }
 
@@ -55,7 +63,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ILocalCacheService localCacheService,
         IEncryptionService encryptionService,
         IThemeService themeService,
-        IClientSessionService sessionService)
+        IClientSessionService sessionService,
+        KeyPublicationService keyPublicationService)
     {
         _apiClient = apiClient;
         _realtimeClient = realtimeClient;
@@ -63,6 +72,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _encryptionService = encryptionService;
         _themeService = themeService;
         _sessionService = sessionService;
+        _keyPublicationService = keyPublicationService;
 
         ChatList = new ChatListViewModel(RefreshRemoteDataAsync);
         ChatList.PropertyChanged += async (_, args) =>
@@ -78,7 +88,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RefreshCommand = new AsyncRelayCommand(RefreshRemoteDataAsync);
         InitializeCommand = new AsyncRelayCommand(InitializeAsync);
         LogoutCommand = new RelayCommand(Logout);
-        ExitCommand = new RelayCommand(() => Environment.Exit(0));
+        ExitCommand = new RelayCommand(() =>
+        {
+            if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)
+            {
+                lifetime.Shutdown();
+            }
+        });
 
         LoginVm = new LoginViewModel(apiClient, sessionService);
         LoginVm.LoginSucceeded += HandleLoginSucceededAsync;
@@ -86,6 +102,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _realtimeClient.MessageReceived += HandleIncomingMessageAsync;
         _realtimeClient.TypingReceived += HandleTypingAsync;
         _realtimeClient.PresenceChanged += HandlePresenceChangedAsync;
+        _realtimeClient.OtpkSupplyLow += HandleOtpkSupplyLowAsync;
     }
 
     private void Logout()
@@ -138,13 +155,39 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Connect SignalR, sync chats, and update status. Called after login or on startup.</summary>
+    /// <summary>Connect SignalR, publish encryption keys, sync chats, and update status. Called after login or on startup.</summary>
     private async Task ConnectAndLoadAsync()
     {
-        await _realtimeClient.ConnectAsync();
-        IsConnected = true;
-        Settings.ConnectionStatus = $"Connected · {_sessionService.ApiBaseUrl}";
-        await RefreshRemoteDataAsync();
+        // Ensure encryption keys are published before connecting (D-07)
+        StatusMessage = "Checking encryption keys...";
+        try
+        {
+            await _keyPublicationService.EnsureKeyBundlePublishedAsync();
+            StatusMessage = string.Empty;
+        }
+        catch (Exception)
+        {
+            StatusMessage = "Key upload failed -- messages may use legacy encryption";
+        }
+
+        try
+        {
+            await _realtimeClient.ConnectAsync();
+            IsConnected = true;
+            Settings.ConnectionStatus = $"Connected · {_sessionService.ApiBaseUrl}";
+            await RefreshRemoteDataAsync();
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
+        {
+            // Token is likely expired or invalid. Force logout.
+            Logout();
+            StatusMessage = "Your session has expired. Please log in again.";
+        }
+    }
+
+    private async Task HandleOtpkSupplyLowAsync()
+    {
+        await _keyPublicationService.ReplenishOtpksAsync();
     }
 
     private async Task RefreshRemoteDataAsync()
@@ -160,7 +203,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         try
         {
             var chats = await _apiClient.GetChatsAsync();
-            ApplyChatSummaries(chats);
+            await ApplyChatSummariesAsync(chats);
             await _localCacheService.SaveAsync("chats", chats);
 
             var settings = await _apiClient.GetSettingsAsync();
@@ -196,13 +239,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var cachedMessages = await _localCacheService.LoadAsync<IReadOnlyCollection<MessageDto>>(cacheKey);
         if (cachedMessages is not null)
         {
-            ReplaceMessages(selectedChat.Id, cachedMessages);
+            await ReplaceMessagesAsync(selectedChat.Id, cachedMessages);
         }
 
         if (_sessionService.IsAuthenticated)
         {
             var messages = await _apiClient.GetMessagesAsync(selectedChat.Id);
-            ReplaceMessages(selectedChat.Id, messages);
+            await ReplaceMessagesAsync(selectedChat.Id, messages);
             await _localCacheService.SaveAsync(cacheKey, messages);
             await _realtimeClient.JoinChatAsync(selectedChat.Id);
         }
@@ -234,11 +277,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 null,
                 DateTimeOffset.UtcNow);
 
-            AppendMessage(demoMessage);
+            await AppendMessageAsync(demoMessage);
             return;
         }
 
-        var encrypted = await _encryptionService.EncryptTextAsync(plaintext);
+        var recipientUserId = selectedChat.PeerUserId;
+        var encrypted = await _encryptionService.EncryptTextAsync(plaintext, recipientUserId);
         var request = new SendMessageRequest(
             selectedChat.Id,
             Guid.NewGuid(),
@@ -248,10 +292,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             encrypted.KeyEnvelope,
             null,
             null,
-            encrypted.MetadataJson);
+            encrypted.MetadataJson,
+            ProtocolVersion.SignalProtocol);
 
         var message = await _apiClient.SendMessageAsync(request);
-        AppendMessage(message);
+        await AppendMessageAsync(message);
         await PersistMessagesAsync(selectedChat.Id);
     }
 
@@ -289,13 +334,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private async Task HandleIncomingMessageAsync(MessageDto message)
     {
-        await Dispatcher.UIThread.InvokeAsync(() =>
+        await Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            UpdateChatPreview(message);
+            await UpdateChatPreviewAsync(message);
 
             if (ChatList.SelectedChat?.Id == message.ChatId)
             {
-                AppendMessage(message);
+                await AppendMessageToWindowAsync(message);
             }
         });
 
@@ -339,7 +384,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var chats = await _localCacheService.LoadAsync<IReadOnlyCollection<ChatSummaryDto>>("chats");
         if (chats is not null)
         {
-            ApplyChatSummaries(chats);
+            await ApplyChatSummariesAsync(chats);
         }
     }
 
@@ -352,18 +397,39 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         Settings.EnableCustomEmoji = settings.EnableCustomEmoji;
     }
 
-    private void ApplyChatSummaries(IReadOnlyCollection<ChatSummaryDto> chats)
+    private async Task ApplyChatSummariesAsync(IReadOnlyCollection<ChatSummaryDto> chats)
     {
         ChatList.Chats.Clear();
 
         foreach (var chat in chats)
         {
+            // Determine peer for 1-to-1 chats (used for E2E encryption recipient)
+            var peer = chat.Members?.FirstOrDefault(m => m.UserId != _sessionService.CurrentUserId);
+
+            string subtitle;
+            if (chat.LastMessage is null)
+            {
+                subtitle = "No messages yet";
+            }
+            else
+            {
+                try
+                {
+                    subtitle = await _encryptionService.DecryptAsync(chat.LastMessage);
+                }
+                catch
+                {
+                    subtitle = "[Unable to decrypt]";
+                }
+            }
+
             ChatList.Chats.Add(new ChatListItemViewModel
             {
                 Id = chat.Id,
                 Title = chat.Title,
                 Type = chat.Type,
-                Subtitle = chat.LastMessage is null ? "No messages yet" : _encryptionService.TryDecrypt(chat.LastMessage),
+                PeerUserId = peer?.UserId ?? Guid.Empty,
+                Subtitle = subtitle,
                 LastActivity = chat.LastMessage?.CreatedAtUtc.LocalDateTime.ToShortTimeString() ?? string.Empty,
                 UnreadCount = chat.UnreadCount
             });
@@ -372,18 +438,18 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ChatList.SelectedChat ??= ChatList.Chats.FirstOrDefault();
     }
 
-    private void ReplaceMessages(Guid chatId, IReadOnlyCollection<MessageDto> messages)
+    private async Task ReplaceMessagesAsync(Guid chatId, IReadOnlyCollection<MessageDto> messages)
     {
         _messageCache[chatId] = messages.ToList();
         ChatWindow.Messages.Clear();
 
         foreach (var message in messages)
         {
-            AppendMessageToWindow(message);
+            await AppendMessageToWindowAsync(message);
         }
     }
 
-    private void AppendMessage(MessageDto message)
+    private async Task AppendMessageAsync(MessageDto message)
     {
         if (!_messageCache.TryGetValue(message.ChatId, out var messages))
         {
@@ -400,28 +466,38 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         if (ChatList.SelectedChat?.Id == message.ChatId)
         {
-            AppendMessageToWindow(message);
+            await AppendMessageToWindowAsync(message);
         }
     }
 
-    private void AppendMessageToWindow(MessageDto message)
+    private async Task AppendMessageToWindowAsync(MessageDto message)
     {
         if (ChatWindow.Messages.Any(x => x.Id == message.Id))
         {
             return;
         }
 
+        string displayText;
+        try
+        {
+            displayText = await _encryptionService.DecryptAsync(message);
+        }
+        catch
+        {
+            displayText = "[Unable to decrypt]";
+        }
+
         ChatWindow.Messages.Add(new MessageItemViewModel
         {
             Id = message.Id,
             SenderDisplayName = message.SenderDisplayName,
-            DisplayText = _encryptionService.TryDecrypt(message),
+            DisplayText = displayText,
             Timestamp = message.CreatedAtUtc.LocalDateTime.ToShortTimeString(),
             IsOutgoing = message.SenderId == _sessionService.CurrentUserId
         });
     }
 
-    private void UpdateChatPreview(MessageDto message)
+    private async Task UpdateChatPreviewAsync(MessageDto message)
     {
         var chatItem = ChatList.Chats.FirstOrDefault(x => x.Id == message.ChatId);
         if (chatItem is null)
@@ -429,7 +505,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
-        chatItem.Subtitle = _encryptionService.TryDecrypt(message);
+        try
+        {
+            chatItem.Subtitle = await _encryptionService.DecryptAsync(message);
+        }
+        catch
+        {
+            chatItem.Subtitle = "[Unable to decrypt]";
+        }
+
         chatItem.LastActivity = message.CreatedAtUtc.LocalDateTime.ToShortTimeString();
     }
 

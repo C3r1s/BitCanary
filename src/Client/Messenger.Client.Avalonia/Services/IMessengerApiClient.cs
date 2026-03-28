@@ -28,5 +28,5 @@ public interface IMessengerApiClient
     // Key bundles
     Task<KeyBundleDto?> GetKeyBundleAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<BundleUploadResponse> UploadKeyBundleAsync(KeyBundleUploadRequest request, CancellationToken cancellationToken = default);
-    Task ReplenishOtpksAsync(OtpkReplenishRequest request, CancellationToken cancellationToken = default);
+    Task<OtpkReplenishResponse> ReplenishOtpksAsync(OtpkReplenishRequest request, CancellationToken cancellationToken = default);
 }

@@ -134,12 +134,13 @@ public sealed class MessengerApiClient(IClientSessionService sessionService) : I
         return (await response.Content.ReadFromJsonAsync<BundleUploadResponse>(cancellationToken))!;
     }
 
-    public async Task ReplenishOtpksAsync(OtpkReplenishRequest request, CancellationToken cancellationToken = default)
+    public async Task<OtpkReplenishResponse> ReplenishOtpksAsync(OtpkReplenishRequest request, CancellationToken cancellationToken = default)
     {
         using var req = Authorized(HttpMethod.Post, "api/keys/opk/batch");
         req.Content = JsonContent.Create(request);
         var response = await _http.SendAsync(req, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<OtpkReplenishResponse>(cancellationToken))!;
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────

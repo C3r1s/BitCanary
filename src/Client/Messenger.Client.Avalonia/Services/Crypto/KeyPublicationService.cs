@@ -23,6 +23,7 @@ public sealed class KeyPublicationService(
     private const string IkPrivateCacheKey = "ik-private-dpapi";
     private const string SpkPrivateCacheKey = "spk-private-dpapi";
     private const string OtpPrivatesCacheKey = "otp-privates-dpapi";
+    private const string OtpIdMapCacheKey = "otp-id-map-dpapi";
     private const string SpkCreatedAtCacheKey = "spk-created-at";
     private const string IkPublicCacheKey = "ik-public";
     private const string SpkPublicCacheKey = "spk-public";
@@ -94,10 +95,10 @@ public sealed class KeyPublicationService(
 
             var deviceId = Guid.Parse(deviceIdStr);
             var newOtps = x3dh.GenerateOneTimePreKeys(ReplenishOtpkCount);
-            await apiClient.ReplenishOtpksAsync(
+            var resp = await apiClient.ReplenishOtpksAsync(
                 new OtpkReplenishRequest(deviceId, newOtps.Select(k => k.Public).ToArray()), ct);
 
-            // Merge into in-memory store (without server-assigned IDs we can only store by public key)
+            // Merge into in-memory store keyed by base64 public key
             foreach (var otp in newOtps)
             {
                 var pubKey = Convert.ToBase64String(otp.Public);
@@ -105,6 +106,11 @@ public sealed class KeyPublicationService(
             }
 
             await localCacheService.SaveAsync(OtpPrivatesCacheKey, _otpPrivates, ct);
+
+            // Populate and persist Guid-to-OtpKeyPair mapping using server-assigned IDs
+            PopulateOtpById(resp.AssignedIds, newOtps);
+            await PersistOtpIdMapAsync(ct);
+
             logger.LogInformation("OPK pool replenished with {Count} new keys.", ReplenishOtpkCount);
         }
         catch (Exception ex)
@@ -134,7 +140,7 @@ public sealed class KeyPublicationService(
             ct);
 
         // Upload OPKs
-        await apiClient.ReplenishOtpksAsync(
+        var otpResp = await apiClient.ReplenishOtpksAsync(
             new OtpkReplenishRequest(resp.DeviceId, otpKeys.Select(k => k.Public).ToArray()),
             ct);
 
@@ -154,6 +160,10 @@ public sealed class KeyPublicationService(
             k => Convert.ToBase64String(k.Public),
             k => keyStore.ProtectToBase64(k.Private));
         await localCacheService.SaveAsync(OtpPrivatesCacheKey, _otpPrivates, ct);
+
+        // Populate and persist Guid-to-OtpKeyPair mapping using server-assigned IDs
+        PopulateOtpById(otpResp.AssignedIds, otpKeys);
+        await PersistOtpIdMapAsync(ct);
 
         logger.LogInformation("Key bundle published. DeviceId={DeviceId}", resp.DeviceId);
     }
@@ -184,14 +194,39 @@ public sealed class KeyPublicationService(
         _otpPrivates = await localCacheService.LoadAsync<Dictionary<string, string>>(OtpPrivatesCacheKey, ct)
                        ?? new Dictionary<string, string>();
 
-        // Reconstruct _otpById from _otpPrivates (public key lookup only — server IDs not cached locally)
-        _otpById = _otpPrivates.ToDictionary(
-            kvp => Guid.Empty, // placeholder — actual IDs require server round-trip
-            kvp => new OtpKeyPair(
-                Convert.FromBase64String(kvp.Key),
-                keyStore.UnprotectFromBase64(kvp.Value)));
+        // Restore Guid-to-OtpKeyPair mapping from persisted ID map
+        _otpById = new Dictionary<Guid, OtpKeyPair>();
+        var otpIdMap = await localCacheService.LoadAsync<Dictionary<string, string>>(OtpIdMapCacheKey, ct);
+        if (otpIdMap is not null)
+        {
+            foreach (var (guidStr, pubKeyB64) in otpIdMap)
+            {
+                if (Guid.TryParse(guidStr, out var opkId) && _otpPrivates.TryGetValue(pubKeyB64, out var privDpapi))
+                {
+                    _otpById[opkId] = new OtpKeyPair(
+                        Convert.FromBase64String(pubKeyB64),
+                        keyStore.UnprotectFromBase64(privDpapi));
+                }
+            }
+        }
 
         logger.LogDebug("Local key bundle loaded from cache. SPK created at {SpkCreatedAt}.", _localBundle.SpkCreatedAt);
+    }
+
+    private void PopulateOtpById(Guid[] assignedIds, IReadOnlyList<OtpKeyPair> otpKeys)
+    {
+        for (var i = 0; i < Math.Min(assignedIds.Length, otpKeys.Count); i++)
+        {
+            _otpById[assignedIds[i]] = otpKeys[i];
+        }
+    }
+
+    private async Task PersistOtpIdMapAsync(CancellationToken ct)
+    {
+        var map = _otpById.ToDictionary(
+            kvp => kvp.Key.ToString(),
+            kvp => Convert.ToBase64String(kvp.Value.Public));
+        await localCacheService.SaveAsync(OtpIdMapCacheKey, map, ct);
     }
 
     private async Task CheckSpkRotationAsync(CancellationToken ct)

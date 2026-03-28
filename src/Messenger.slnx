@@ -11,4 +11,7 @@
   <Folder Name="/Shared/">
     <Project Path="Shared/Messenger.Shared.Contracts/Messenger.Shared.Contracts.csproj" />
   </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="..\tests\Messenger.Client.Tests\Messenger.Client.Tests.csproj" />
+  </Folder>
 </Solution>

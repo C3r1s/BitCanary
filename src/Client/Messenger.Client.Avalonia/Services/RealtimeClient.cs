@@ -19,6 +19,7 @@ public sealed class RealtimeClient : IRealtimeClient
     public event Func<TypingIndicatorDto, Task>? TypingReceived;
     public event Func<CallSignalDto, Task>? CallSignalReceived;
     public event Func<PresenceChangedDto, Task>? PresenceChanged;
+    public event Func<Task>? OtpkSupplyLow;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -52,10 +53,11 @@ public sealed class RealtimeClient : IRealtimeClient
             .WithAutomaticReconnect()
             .Build();
 
-        connection.On<MessageDto>("MessageReceived", message => MessageReceived?.Invoke(message) ?? Task.CompletedTask);
-        connection.On<TypingIndicatorDto>("TypingIndicator", typing => TypingReceived?.Invoke(typing) ?? Task.CompletedTask);
-        connection.On<CallSignalDto>("CallSignalReceived", signal => CallSignalReceived?.Invoke(signal) ?? Task.CompletedTask);
-        connection.On<PresenceChangedDto>("PresenceChanged", signal => PresenceChanged?.Invoke(signal) ?? Task.CompletedTask);
+        connection.On<MessageDto>(RealtimeEventNames.MessageReceived, message => MessageReceived?.Invoke(message) ?? Task.CompletedTask);
+        connection.On<TypingIndicatorDto>(RealtimeEventNames.TypingIndicator, typing => TypingReceived?.Invoke(typing) ?? Task.CompletedTask);
+        connection.On<CallSignalDto>(RealtimeEventNames.CallSignalReceived, signal => CallSignalReceived?.Invoke(signal) ?? Task.CompletedTask);
+        connection.On<PresenceChangedDto>(RealtimeEventNames.PresenceChanged, signal => PresenceChanged?.Invoke(signal) ?? Task.CompletedTask);
+        connection.On(RealtimeEventNames.OtpkSupplyLow, () => OtpkSupplyLow?.Invoke() ?? Task.CompletedTask);
 
         return connection;
     }

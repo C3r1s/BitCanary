@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Messenger.Shared.Contracts;
@@ -107,6 +108,38 @@ public sealed class MessengerApiClient(IClientSessionService sessionService) : I
         var response = await _http.SendAsync(req, cancellationToken);
         await EnsureSuccessAsync(response, cancellationToken);
         return (await response.Content.ReadFromJsonAsync<MediaUploadResponse>(cancellationToken))!;
+    }
+
+    // ── Key bundles ─────────────────────────────────────────────────────
+
+    public async Task<KeyBundleDto?> GetKeyBundleAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        using var req = Authorized(HttpMethod.Get, $"api/keys/{userId}");
+        var response = await _http.SendAsync(req, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<KeyBundleDto>(cancellationToken);
+    }
+
+    public async Task<BundleUploadResponse> UploadKeyBundleAsync(KeyBundleUploadRequest request, CancellationToken cancellationToken = default)
+    {
+        using var req = Authorized(HttpMethod.Post, "api/keys/bundle");
+        req.Content = JsonContent.Create(request);
+        var response = await _http.SendAsync(req, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<BundleUploadResponse>(cancellationToken))!;
+    }
+
+    public async Task ReplenishOtpksAsync(OtpkReplenishRequest request, CancellationToken cancellationToken = default)
+    {
+        using var req = Authorized(HttpMethod.Post, "api/keys/opk/batch");
+        req.Content = JsonContent.Create(request);
+        var response = await _http.SendAsync(req, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────

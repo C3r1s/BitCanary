@@ -24,4 +24,9 @@ public interface IMessengerApiClient
         string contentType,
         Stream content,
         CancellationToken cancellationToken = default);
+
+    // Key bundles
+    Task<KeyBundleDto?> GetKeyBundleAsync(Guid userId, CancellationToken cancellationToken = default);
+    Task<BundleUploadResponse> UploadKeyBundleAsync(KeyBundleUploadRequest request, CancellationToken cancellationToken = default);
+    Task ReplenishOtpksAsync(OtpkReplenishRequest request, CancellationToken cancellationToken = default);
 }

@@ -5,6 +5,6 @@ namespace Messenger.Client.Avalonia.Services;
 
 public interface IEncryptionService
 {
-    Task<EncryptedMessageDraft> EncryptTextAsync(string plaintext, CancellationToken cancellationToken = default);
-    string TryDecrypt(MessageDto message);
+    Task<EncryptedMessageDraft> EncryptTextAsync(string plaintext, Guid recipientUserId, CancellationToken cancellationToken = default);
+    Task<string> DecryptAsync(MessageDto message, CancellationToken cancellationToken = default);
 }

@@ -126,4 +126,69 @@ public sealed class RatchetSessionRepository(SqliteConnection connection) : IRat
         cmd.Parameters.AddWithValue("$max", maxKeys);
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    /// <inheritdoc/>
+    public async Task<(bool Verified, DateTimeOffset? LastVerifiedAt, byte[]? RemoteIkPublic)>
+        LoadVerificationStateAsync(string sessionId, CancellationToken ct = default)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT verified, last_verified_at, remote_ik_public
+            FROM ratchet_sessions
+            WHERE id = $id
+            """;
+        cmd.Parameters.AddWithValue("$id", sessionId);
+
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+            return (false, null, null);  // No row → treat as unverified (Pitfall 3: no false alert)
+
+        var verified = reader.GetInt64(0) != 0;
+
+        DateTimeOffset? lastVerifiedAt = null;
+        if (!reader.IsDBNull(1))
+        {
+            var raw = reader.GetString(1);
+            if (DateTimeOffset.TryParse(raw, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dto))
+                lastVerifiedAt = dto;
+        }
+
+        byte[]? remoteIkPublic = null;
+        if (!reader.IsDBNull(2))
+            remoteIkPublic = (byte[])reader.GetValue(2);
+
+        return (verified, lastVerifiedAt, remoteIkPublic);
+    }
+
+    /// <inheritdoc/>
+    public async Task SaveVerificationStateAsync(
+        string sessionId,
+        bool verified,
+        DateTimeOffset? lastVerifiedAt,
+        byte[]? remoteIkPublic,
+        CancellationToken ct = default)
+    {
+        // UPSERT: insert skeleton row if absent, then update verification columns
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO ratchet_sessions(id, session_blob, updated_at, verified, last_verified_at, remote_ik_public)
+            VALUES ($id, X'', datetime('now','utc'), $v, $lva, $rik)
+            ON CONFLICT(id) DO UPDATE SET
+                verified         = excluded.verified,
+                last_verified_at = excluded.last_verified_at,
+                remote_ik_public = excluded.remote_ik_public,
+                updated_at       = excluded.updated_at
+            """;
+        cmd.Parameters.AddWithValue("$id", sessionId);
+        cmd.Parameters.AddWithValue("$v", verified ? 1L : 0L);
+        cmd.Parameters.AddWithValue("$lva",
+            lastVerifiedAt.HasValue
+                ? (object)lastVerifiedAt.Value.ToString("O")
+                : DBNull.Value);
+        cmd.Parameters.AddWithValue("$rik",
+            remoteIkPublic is not null
+                ? (object)remoteIkPublic
+                : DBNull.Value);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
 }

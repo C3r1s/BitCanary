@@ -22,4 +22,22 @@ public interface IRatchetSessionRepository
         CancellationToken ct = default);
 
     Task EnforceSkippedKeyLimitAsync(string sessionId, int maxKeys, CancellationToken ct = default);
+
+    /// <summary>
+    /// Loads the verification state for a session.
+    /// Returns (false, null, null) if the session does not exist — no false-positive alerts.
+    /// </summary>
+    Task<(bool Verified, DateTimeOffset? LastVerifiedAt, byte[]? RemoteIkPublic)>
+        LoadVerificationStateAsync(string sessionId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Persists the verification state for a session.
+    /// Creates the session row if it does not yet exist (UPSERT pattern).
+    /// </summary>
+    Task SaveVerificationStateAsync(
+        string sessionId,
+        bool verified,
+        DateTimeOffset? lastVerifiedAt,
+        byte[]? remoteIkPublic,
+        CancellationToken ct = default);
 }

@@ -67,6 +67,16 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         await File.WriteAllBytesAsync(keyFile, protectedBlob, ct);
     }
 
+    /// <summary>
+    /// Applies the full schema to the provided connection — exposed for unit/integration tests
+    /// that open an in-memory SQLite database directly without going through <see cref="OpenAsync"/>.
+    /// </summary>
+    public static async Task ApplySchemaForTestAsync(SqliteConnection conn, CancellationToken ct = default)
+    {
+        await ApplySchemaAsync(conn, ct);
+        await MigrateToV2Async(conn, ct);
+    }
+
     private static async Task EnableWalAsync(SqliteConnection conn, CancellationToken ct)
     {
         await using var cmd = conn.CreateCommand();

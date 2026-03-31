@@ -46,6 +46,7 @@ public static class ServiceCollectionExtensions
             new RatchetSessionRepository(sp.GetRequiredService<SqliteConnection>()));
 
         // ── Crypto services ────────────────────────────────────────────────
+        services.AddSingleton<ISafetyNumberService, SafetyNumberService>();
         services.AddSingleton<IX3DHService, X3DHService>();
         services.AddSingleton<IDoubleRatchetService, DoubleRatchetService>();
         services.AddSingleton<ISessionManager, SessionManager>();

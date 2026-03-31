@@ -21,6 +21,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly IThemeService _themeService;
     private readonly IClientSessionService _sessionService;
     private readonly KeyPublicationService _keyPublicationService;
+    private readonly ISafetyNumberService _safetyNumberService;
+    private readonly IRatchetSessionRepository _sessionRepository;
+    private readonly HashSet<string> _blockedSessions = new();
     private readonly Dictionary<Guid, List<MessageDto>> _messageCache = new();
 
     [ObservableProperty]
@@ -38,6 +41,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isMigrating;
+
+    [ObservableProperty]
+    private bool _isShowingSafetyNumber;
+
+    public SafetyNumberViewModel SafetyNumber { get; }
+
+    public IRelayCommand ShowSafetyNumberCommand { get; }
 
     public ChatListViewModel ChatList { get; }
 
@@ -64,7 +74,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         IEncryptionService encryptionService,
         IThemeService themeService,
         IClientSessionService sessionService,
-        KeyPublicationService keyPublicationService)
+        KeyPublicationService keyPublicationService,
+        ISafetyNumberService safetyNumberService,
+        IRatchetSessionRepository sessionRepository)
     {
         _apiClient = apiClient;
         _realtimeClient = realtimeClient;
@@ -73,17 +85,37 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _themeService = themeService;
         _sessionService = sessionService;
         _keyPublicationService = keyPublicationService;
+        _safetyNumberService = safetyNumberService;
+        _sessionRepository = sessionRepository;
+
+        SafetyNumber = new SafetyNumberViewModel(
+            _safetyNumberService,
+            _sessionRepository,
+            () => IsShowingSafetyNumber = false);
 
         ChatList = new ChatListViewModel(RefreshRemoteDataAsync);
+
+        ShowSafetyNumberCommand = new RelayCommand(
+            () => _ = ShowSafetyNumberAsync(),
+            () => ChatList.SelectedChat is not null);
+
         ChatList.PropertyChanged += async (_, args) =>
         {
             if (args.PropertyName == nameof(ChatListViewModel.SelectedChat))
             {
+                ShowSafetyNumberCommand.NotifyCanExecuteChanged();
                 await LoadSelectedChatAsync();
             }
         };
 
-        MessageInput = new MessageInputViewModel(SendMessageAsync, SendTypingAsync, () => ChatList.SelectedChat?.Id);
+        // Wire ShowSafetyNumberCommand into ChatWindow so header can bind to it
+        ChatWindow.ShowSafetyNumberCommand = ShowSafetyNumberCommand;
+
+        MessageInput = new MessageInputViewModel(
+            SendMessageAsync,
+            SendTypingAsync,
+            () => ChatList.SelectedChat?.Id,
+            () => _blockedSessions.Contains(GetCurrentSessionId()));
         Settings = new SettingsViewModel(ChangeThemeAsync);
         RefreshCommand = new AsyncRelayCommand(RefreshRemoteDataAsync);
         InitializeCommand = new AsyncRelayCommand(InitializeAsync);
@@ -228,12 +260,29 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             ChatWindow.Title = "Select a chat";
             ChatWindow.Subtitle = "Choose a conversation to view encrypted history.";
+            ChatWindow.IsSessionVerified = false;
+            MessageInput.NotifyBlockStateChanged();
             return;
         }
 
         ChatWindow.Title = selectedChat.Title;
         ChatWindow.Subtitle = selectedChat.Type.ToString();
         StatusMessage = $"Loading {selectedChat.Title}...";
+
+        // Load verification state for this session
+        var sessionId = GetCurrentSessionId();
+        if (!string.IsNullOrEmpty(sessionId))
+        {
+            var verState = await _sessionRepository.LoadVerificationStateAsync(sessionId);
+            ChatWindow.IsSessionVerified = verState.Verified;
+        }
+        else
+        {
+            ChatWindow.IsSessionVerified = false;
+        }
+
+        // Notify message input so CanSend re-evaluates for the new chat
+        MessageInput.NotifyBlockStateChanged();
 
         var cacheKey = GetMessageCacheKey(selectedChat.Id);
         var cachedMessages = await _localCacheService.LoadAsync<IReadOnlyCollection<MessageDto>>(cacheKey);
@@ -251,6 +300,44 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         StatusMessage = $"{selectedChat.Title} ready.";
+    }
+
+    private async Task ShowSafetyNumberAsync()
+    {
+        var selectedChat = ChatList.SelectedChat;
+        if (selectedChat is null) return;
+
+        var bundle = await _apiClient.GetKeyBundleAsync(selectedChat.PeerUserId);
+        if (bundle is null) return;
+
+        var sessionId = GetCurrentSessionId();
+        byte[] localIkPublic;
+        try
+        {
+            localIkPublic = _keyPublicationService.LocalBundle.IkPublic;
+        }
+        catch (InvalidOperationException)
+        {
+            // Key bundle not yet loaded — can't show safety number
+            return;
+        }
+
+        await SafetyNumber.LoadAsync(
+            sessionId,
+            selectedChat.Title,
+            localIkPublic,
+            _sessionService.CurrentUserId.ToString("D"),
+            bundle.IkPublic,
+            selectedChat.PeerUserId.ToString("D"));
+
+        IsShowingSafetyNumber = true;
+    }
+
+    private string GetCurrentSessionId()
+    {
+        var selected = ChatList.SelectedChat;
+        if (selected is null) return string.Empty;
+        return $"{_sessionService.CurrentUserId}:{selected.PeerUserId}";
     }
 
     private async Task SendMessageAsync(string plaintext)

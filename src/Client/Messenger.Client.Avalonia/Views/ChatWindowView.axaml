@@ -8,6 +8,45 @@
       <StackPanel Spacing="4">
         <TextBlock Text="{Binding Title}" FontSize="24" FontWeight="SemiBold" />
         <TextBlock Text="{Binding Subtitle}" Opacity="0.7" />
+
+        <!-- Header action row: Safety Number button + verification badge -->
+        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+
+          <!-- Safety Number pill button -->
+          <Button Background="Transparent"
+                  Padding="0"
+                  Command="{Binding ShowSafetyNumberCommand}">
+            <Border CornerRadius="999"
+                    Padding="8,4"
+                    BorderBrush="#2C7A7B"
+                    BorderThickness="1">
+              <TextBlock Text="Safety Number"
+                         FontSize="13"
+                         Foreground="#2C7A7B" />
+            </Border>
+          </Button>
+
+          <!-- Unverified badge (shown when !IsSessionVerified) -->
+          <Border CornerRadius="999"
+                  Padding="8,4"
+                  Background="#5C1A1A"
+                  IsVisible="{Binding !IsSessionVerified}">
+            <TextBlock Text="&#9888; Identity unverified"
+                       FontSize="13"
+                       Foreground="White" />
+          </Border>
+
+          <!-- Verified badge (shown when IsSessionVerified) -->
+          <Border CornerRadius="999"
+                  Padding="8,4"
+                  Background="#2C7A7B"
+                  IsVisible="{Binding IsSessionVerified}">
+            <TextBlock Text="Verified"
+                       FontSize="13"
+                       Foreground="White" />
+          </Border>
+
+        </StackPanel>
       </StackPanel>
 
       <TextBlock Grid.Row="1"

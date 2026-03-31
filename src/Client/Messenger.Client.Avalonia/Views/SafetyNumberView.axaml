@@ -1,0 +1,70 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
+             x:Class="Messenger.Client.Avalonia.Views.SafetyNumberView"
+             x:DataType="vm:SafetyNumberViewModel">
+  <StackPanel Spacing="24">
+
+    <!-- Row 1: Title + Close button -->
+    <Grid ColumnDefinitions="*,Auto">
+      <TextBlock Text="Safety Number"
+                 FontSize="24"
+                 FontWeight="SemiBold"
+                 VerticalAlignment="Center" />
+      <Button Grid.Column="1"
+              Content="X"
+              Command="{Binding CloseCommand}"
+              Background="Transparent"
+              Padding="8,4"
+              VerticalAlignment="Center" />
+    </Grid>
+
+    <!-- Row 2: Peer display name -->
+    <TextBlock Text="{Binding PeerDisplayName}"
+               FontSize="20"
+               FontWeight="SemiBold"
+               Opacity="0.8" />
+
+    <!-- Row 3: Loading spinner -->
+    <ProgressBar IsIndeterminate="True"
+                 Width="200"
+                 IsVisible="{Binding IsLoading}" />
+
+    <!-- Row 4: Safety number digits -->
+    <TextBlock Text="{Binding SafetyNumber}"
+               FontSize="24"
+               FontWeight="SemiBold"
+               FontFamily="Cascadia Mono, Consolas, Courier New"
+               TextWrapping="Wrap"
+               TextAlignment="Center"
+               IsVisible="{Binding !IsLoading}" />
+
+    <!-- Row 5: Instructional text -->
+    <TextBlock FontSize="16"
+               TextWrapping="Wrap"
+               Opacity="0.85">
+      <Run Text="Compare these numbers with " />
+      <Run Text="{Binding PeerDisplayName}" />
+      <Run Text=" over a phone call or in person. If the numbers match, this conversation is secure." />
+    </TextBlock>
+
+    <!-- Row 6: Verification timestamp (shown when verified) -->
+    <StackPanel IsVisible="{Binding IsVerified}">
+      <TextBlock Text="{Binding VerifiedOnText}"
+                 Foreground="#2C7A7B"
+                 FontSize="13" />
+    </StackPanel>
+
+    <!-- Row 7: Mark as Verified button -->
+    <Button Content="{Binding VerifyButtonText}"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Center"
+            Background="#2C7A7B"
+            Foreground="White"
+            FontSize="16"
+            FontWeight="SemiBold"
+            Command="{Binding MarkAsVerifiedCommand}"
+            IsEnabled="{Binding !IsVerified}" />
+
+  </StackPanel>
+</UserControl>

@@ -3,19 +3,35 @@
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
              x:Class="Messenger.Client.Avalonia.Views.MessageInputView"
              x:DataType="vm:MessageInputViewModel">
-  <Border Classes="surface-card" Padding="14">
-    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-      <TextBox AcceptsReturn="True"
-               MinHeight="64"
-               TextWrapping="Wrap"
-               Watermark="Write an encrypted message..."
-               Text="{Binding Text, Mode=TwoWay}" />
+  <Grid>
 
-      <Button Grid.Column="1"
-              MinWidth="110"
-              VerticalAlignment="Stretch"
-              Command="{Binding SendCommand}"
-              Content="Send" />
-    </Grid>
-  </Border>
+    <!-- Existing input content -->
+    <Border Classes="surface-card" Padding="14">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <TextBox AcceptsReturn="True"
+                 MinHeight="64"
+                 TextWrapping="Wrap"
+                 Watermark="Write an encrypted message..."
+                 Text="{Binding Text, Mode=TwoWay}" />
+
+        <Button Grid.Column="1"
+                MinWidth="110"
+                VerticalAlignment="Stretch"
+                Command="{Binding SendCommand}"
+                Content="Send" />
+      </Grid>
+    </Border>
+
+    <!-- Block overlay — shown when session is not verified -->
+    <Border Background="#C8000000"
+            CornerRadius="12"
+            IsVisible="{Binding IsBlockedForKeyVerification}">
+      <TextBlock Text="Verify identity to continue"
+                 FontSize="16"
+                 Foreground="White"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center" />
+    </Border>
+
+  </Grid>
 </UserControl>

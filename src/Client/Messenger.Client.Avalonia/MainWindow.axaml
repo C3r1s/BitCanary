@@ -16,6 +16,36 @@
   <Panel>
 
     <!-- ═══════════════════════════════════════════════════════════
+         MIGRATION OVERLAY  (shown during database startup migration)
+    ═══════════════════════════════════════════════════════════════ -->
+    <Grid IsVisible="{Binding IsMigrating}"
+          Background="#80000000"
+          ZIndex="50">
+      <Border CornerRadius="16" Padding="32" MaxWidth="420"
+              VerticalAlignment="Center" HorizontalAlignment="Center"
+              Background="{DynamicResource SystemAltHighColor}">
+        <StackPanel Spacing="16" HorizontalAlignment="Center">
+          <TextBlock Text="Migrating local database..." FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+          <ProgressBar IsIndeterminate="True" Width="200" />
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <!-- ═══════════════════════════════════════════════════════════
+         SAFETY NUMBER OVERLAY
+    ═══════════════════════════════════════════════════════════════ -->
+    <Grid IsVisible="{Binding IsShowingSafetyNumber}"
+          Background="#C0000000"
+          ZIndex="100"
+          PointerPressed="SafetyNumberScrim_PointerPressed">
+      <Border CornerRadius="20" Padding="32" MaxWidth="480"
+              VerticalAlignment="Center" HorizontalAlignment="Center"
+              Background="{DynamicResource SystemAltHighColor}">
+        <views:SafetyNumberView DataContext="{Binding SafetyNumber}" />
+      </Border>
+    </Grid>
+
+    <!-- ═══════════════════════════════════════════════════════════
          LOGIN SCREEN  (shown when IsLoggedIn = false)
     ═══════════════════════════════════════════════════════════════ -->
     <Grid IsVisible="{Binding !IsLoggedIn}"

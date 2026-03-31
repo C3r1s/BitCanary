@@ -51,9 +51,16 @@ public sealed class StartupMigrationService(
         var chats = await localCacheService.LoadAsync<List<ChatSummaryDto>>("chats", cancellationToken);
         if (chats is null || chats.Count == 0) return;
 
-        foreach (var chat in chats)
+        const int batchSize = 100;
+        for (var i = 0; i < chats.Count; i += batchSize)
         {
-            await messageRepository.UpsertChatAsync(chat, cancellationToken);
+            var batch = chats.Skip(i).Take(batchSize);
+            foreach (var chat in batch)
+            {
+                await messageRepository.UpsertChatAsync(chat, cancellationToken);
+            }
+            // Give the UI thread a chance to process events
+            await Task.Delay(10, cancellationToken);
         }
 
         // Overwrite chats.json with empty list so subsequent runs skip this step.

@@ -37,8 +37,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<SqliteConnection>(sp =>
         {
             var dbService = sp.GetRequiredService<DatabaseService>();
-            return dbService.OpenAsync(cancellationToken: CancellationToken.None)
-                            .GetAwaiter().GetResult();
+            // Task.Run escapes the Avalonia SynchronizationContext so File I/O inside
+            // OpenAsync doesn't deadlock when resolved lazily on the UI thread.
+            return Task.Run(() => dbService.OpenAsync(cancellationToken: CancellationToken.None))
+                       .GetAwaiter().GetResult();
         });
         services.AddSingleton<ILocalMessageRepository>(sp =>
             new LocalMessageRepository(sp.GetRequiredService<SqliteConnection>()));

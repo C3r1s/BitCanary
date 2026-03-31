@@ -42,6 +42,7 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
 
         await EnableWalAsync(conn, cancellationToken);
         await ApplySchemaAsync(conn, cancellationToken);
+        await MigrateToV2Async(conn, cancellationToken);
 
         return conn;
     }

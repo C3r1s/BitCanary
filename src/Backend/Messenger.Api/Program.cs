@@ -5,7 +5,8 @@ using Messenger.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
-
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 builder.Services.AddMessengerApi(builder.Configuration);
 
 var app = builder.Build();
@@ -24,6 +25,8 @@ app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 if (app.Environment.IsDevelopment())
 {
+    app.UseSwagger();
+    app.UseSwaggerUI();
     // Built-in .NET 10 OpenAPI document: GET /openapi/v1.json
     app.MapOpenApi();
 }

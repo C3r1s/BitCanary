@@ -247,6 +247,12 @@ namespace Messenger.Infrastructure.Persistence.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("metadata_json");
 
+                    b.Property<int>("ProtocolVersion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("protocol_version");
+
                     b.Property<Guid?>("ReplyToMessageId")
                         .HasColumnType("uuid")
                         .HasColumnName("reply_to_message_id");
@@ -269,6 +275,33 @@ namespace Messenger.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("messages", (string)null);
+                });
+
+            modelBuilder.Entity("Messenger.Domain.Entities.OneTimePreKey", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
+                    b.Property<byte[]>("PublicKey")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("public_key");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "ClaimedAt");
+
+                    b.ToTable("one_time_pre_keys", (string)null);
                 });
 
             modelBuilder.Entity("Messenger.Domain.Entities.User", b =>
@@ -342,6 +375,48 @@ namespace Messenger.Infrastructure.Persistence.Migrations
                     b.HasIndex("ChatId");
 
                     b.ToTable("folder_chats", (string)null);
+                });
+
+            modelBuilder.Entity("Messenger.Domain.Entities.UserKeyBundle", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("DeviceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("device_id");
+
+                    b.Property<byte[]>("IkPublic")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("ik_public");
+
+                    b.Property<DateTimeOffset>("SpkCreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("spk_created_at");
+
+                    b.Property<byte[]>("SpkPublic")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("spk_public");
+
+                    b.Property<byte[]>("SpkSignature")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("spk_signature");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "DeviceId")
+                        .IsUnique();
+
+                    b.ToTable("user_key_bundles", (string)null);
                 });
 
             modelBuilder.Entity("Messenger.Domain.Entities.UserSettings", b =>

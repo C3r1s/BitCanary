@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Messenger.Client.Avalonia.Models;
@@ -19,7 +20,9 @@ public sealed class SignalProtocolEncryptionService(
     Crypto.KeyPublicationService keyPublication,
     IMessengerApiClient apiClient,
     IClientSessionService sessionService,
-    LocalEnvelopeEncryptionService legacyService) : IEncryptionService
+    LocalEnvelopeEncryptionService legacyService,
+    Crypto.IRatchetSessionRepository sessionRepository,
+    Crypto.IIdentityKeyChangeDetector changeDetector) : IEncryptionService
 {
     public async Task<EncryptedMessageDraft> EncryptTextAsync(
         string plaintext, Guid recipientUserId, CancellationToken cancellationToken = default)
@@ -125,6 +128,38 @@ public sealed class SignalProtocolEncryptionService(
             {
                 var ekPub = Convert.FromBase64String(x3dhElement.GetProperty("ek_pub").GetString()!);
                 var ikPub = Convert.FromBase64String(x3dhElement.GetProperty("ik_pub").GetString()!);
+
+                // Identity key change detection (KEY-02)
+                // Must run BEFORE CreateResponderSessionAsync to catch key substitution
+                var verState = await sessionRepository.LoadVerificationStateAsync(sessionId, cancellationToken);
+                if (verState.RemoteIkPublic is not null)
+                {
+                    // Stored IK exists — compare using constant-time equality (Pitfall 6: no SequenceEqual)
+                    bool same = CryptographicOperations.FixedTimeEquals(verState.RemoteIkPublic, ikPub);
+                    if (!same)
+                    {
+                        // Key change detected — reset verification state, store new IK, fire alert
+                        await sessionRepository.SaveVerificationStateAsync(
+                            sessionId,
+                            verified: false,
+                            lastVerifiedAt: null,
+                            remoteIkPublic: ikPub,
+                            cancellationToken);
+                        await changeDetector.RaiseAsync(sessionId, ikPub);
+                    }
+                    // Keys match — no action needed (silent)
+                }
+                else
+                {
+                    // First time seeing this peer's IK — store silently, no alert (Pitfall 3)
+                    await sessionRepository.SaveVerificationStateAsync(
+                        sessionId,
+                        verified: false,
+                        lastVerifiedAt: null,
+                        remoteIkPublic: ikPub,
+                        cancellationToken);
+                }
+
                 Guid? opkId = null;
                 byte[]? otpPrivate = null;
 

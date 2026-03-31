@@ -138,4 +138,29 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
             """;
         await cmd.ExecuteNonQueryAsync(ct);
     }
+
+    private static async Task MigrateToV2Async(SqliteConnection conn, CancellationToken ct)
+    {
+        await using var checkCmd = conn.CreateCommand();
+        checkCmd.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE version = 2";
+        var count = (long)(await checkCmd.ExecuteScalarAsync(ct))!;
+        if (count > 0) return;
+
+        // SQLite requires separate commands per ALTER TABLE (not batched)
+        await using var cmd1 = conn.CreateCommand();
+        cmd1.CommandText = "ALTER TABLE ratchet_sessions ADD COLUMN verified INTEGER NOT NULL DEFAULT 0";
+        await cmd1.ExecuteNonQueryAsync(ct);
+
+        await using var cmd2 = conn.CreateCommand();
+        cmd2.CommandText = "ALTER TABLE ratchet_sessions ADD COLUMN last_verified_at TEXT NULL";
+        await cmd2.ExecuteNonQueryAsync(ct);
+
+        await using var cmd3 = conn.CreateCommand();
+        cmd3.CommandText = "ALTER TABLE ratchet_sessions ADD COLUMN remote_ik_public BLOB NULL";
+        await cmd3.ExecuteNonQueryAsync(ct);
+
+        await using var cmd4 = conn.CreateCommand();
+        cmd4.CommandText = "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (2, datetime('now', 'utc'))";
+        await cmd4.ExecuteNonQueryAsync(ct);
+    }
 }

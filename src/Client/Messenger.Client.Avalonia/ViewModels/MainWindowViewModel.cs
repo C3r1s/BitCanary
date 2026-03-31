@@ -76,7 +76,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         IClientSessionService sessionService,
         KeyPublicationService keyPublicationService,
         ISafetyNumberService safetyNumberService,
-        IRatchetSessionRepository sessionRepository)
+        IRatchetSessionRepository sessionRepository,
+        IIdentityKeyChangeDetector changeDetector)
     {
         _apiClient = apiClient;
         _realtimeClient = realtimeClient;
@@ -135,6 +136,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _realtimeClient.TypingReceived += HandleTypingAsync;
         _realtimeClient.PresenceChanged += HandlePresenceChangedAsync;
         _realtimeClient.OtpkSupplyLow += HandleOtpkSupplyLowAsync;
+
+        changeDetector.IdentityKeyChanged += HandleIdentityKeyChangedAsync;
     }
 
     private void Logout()
@@ -222,6 +225,47 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         await _keyPublicationService.ReplenishOtpksAsync();
     }
 
+    private async Task HandleIdentityKeyChangedAsync(string sessionId, byte[] newIkPublic)
+    {
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            // 1. Add sessionId to blocked set
+            _blockedSessions.Add(sessionId);
+
+            // 2. Update MessageInput block state if current chat matches
+            var currentSessionId = GetCurrentSessionId();
+            if (currentSessionId == sessionId)
+            {
+                MessageInput.IsBlockedForKeyVerification = true;
+                MessageInput.NotifyBlockStateChanged();
+            }
+
+            // 3. Inject banner into ChatWindow.Messages if current chat matches
+            if (currentSessionId == sessionId)
+            {
+                var banner = MessageItemViewModel.CreateBanner(
+                    "Verify before trusting new messages. If you did not expect this change, do not send sensitive information.",
+                    new RelayCommand(() => _ = ShowSafetyNumberAsync()),
+                    new RelayCommand(() => DismissKeyChangeBanner(sessionId)));
+                ChatWindow.Messages.Add(banner);
+            }
+        });
+    }
+
+    private void DismissKeyChangeBanner(string sessionId)
+    {
+        _blockedSessions.Remove(sessionId);
+
+        // If this is the current chat, re-enable send
+        if (GetCurrentSessionId() == sessionId)
+        {
+            MessageInput.IsBlockedForKeyVerification = false;
+            MessageInput.NotifyBlockStateChanged();
+        }
+
+        // Do NOT mark session as verified — "Send Anyway" explicitly does not verify (per UI-SPEC)
+    }
+
     private async Task RefreshRemoteDataAsync()
     {
         if (!_sessionService.IsAuthenticated)
@@ -275,10 +319,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             var verState = await _sessionRepository.LoadVerificationStateAsync(sessionId);
             ChatWindow.IsSessionVerified = verState.Verified;
+
+            // Re-evaluate block state per session (Pitfall 4: must not share block state across chats)
+            MessageInput.IsBlockedForKeyVerification = _blockedSessions.Contains(sessionId);
         }
         else
         {
             ChatWindow.IsSessionVerified = false;
+            MessageInput.IsBlockedForKeyVerification = false;
         }
 
         // Notify message input so CanSend re-evaluates for the new chat

@@ -58,14 +58,52 @@
         <ItemsControl ItemsSource="{Binding Messages}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:MessageItemViewModel">
-              <Border Classes="message-bubble"
-                      Classes.outgoing="{Binding IsOutgoing}">
-                <StackPanel Spacing="6">
-                  <TextBlock Text="{Binding SenderDisplayName}" FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
-                  <TextBlock Text="{Binding Timestamp}" Opacity="0.7" HorizontalAlignment="Right" />
-                </StackPanel>
-              </Border>
+              <Panel>
+                <!-- Normal message bubble (IsSystemBanner = false) -->
+                <Border Classes="message-bubble"
+                        Classes.outgoing="{Binding IsOutgoing}"
+                        IsVisible="{Binding !IsSystemBanner}">
+                  <StackPanel Spacing="6">
+                    <TextBlock Text="{Binding SenderDisplayName}" FontWeight="SemiBold" />
+                    <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Timestamp}" Opacity="0.7" HorizontalAlignment="Right" />
+                  </StackPanel>
+                </Border>
+
+                <!-- System banner (IsSystemBanner = true) -->
+                <Border Background="#5C1A1A"
+                        CornerRadius="12"
+                        Padding="12"
+                        Margin="0,0,0,10"
+                        HorizontalAlignment="Stretch"
+                        IsVisible="{Binding IsSystemBanner}">
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="&#9888; Safety number changed"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="White" />
+                    <TextBlock Text="{Binding BannerText}"
+                               TextWrapping="Wrap"
+                               FontSize="16"
+                               Foreground="White" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <Button Content="{Binding BannerAction1Label}"
+                              Command="{Binding BannerAction1Command}"
+                              Background="#2C7A7B"
+                              Foreground="White"
+                              FontSize="16"
+                              FontWeight="SemiBold"
+                              IsVisible="{Binding BannerAction1Label, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                      <Button Content="{Binding BannerAction2Label}"
+                              Command="{Binding BannerAction2Command}"
+                              Background="#5C1A1A"
+                              Foreground="White"
+                              FontSize="16"
+                              IsVisible="{Binding BannerAction2Label, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+              </Panel>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>

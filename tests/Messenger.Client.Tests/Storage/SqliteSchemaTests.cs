@@ -96,4 +96,55 @@ public sealed class SqliteSchemaTests
             Assert.False(bytes[0] == 0x1F && bytes[1] == 0x8B, "db-key.bin should not be gzip-encoded");
         }
     }
+
+    [Fact]
+    public async Task FtsVirtualTableExists()
+    {
+        var (svc, tempDir) = BuildService();
+
+        await using var conn = await svc.OpenAsync(localAppDataOverride: tempDir);
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table' AND name='messages_fts';";
+        var result = await cmd.ExecuteScalarAsync();
+
+        Assert.NotNull(result);
+        Assert.Equal("messages_fts", result);
+    }
+
+    [Fact]
+    public async Task FtsTriggersExist()
+    {
+        var (svc, tempDir) = BuildService();
+
+        await using var conn = await svc.OpenAsync(localAppDataOverride: tempDir);
+
+        var triggers = new List<string>();
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='trigger';";
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            triggers.Add(reader.GetString(0));
+        }
+
+        Assert.Contains("messages_ai", triggers);
+        Assert.Contains("messages_ad", triggers);
+        Assert.Contains("messages_au", triggers);
+    }
+
+    [Fact]
+    public async Task SchemaMigrationsVersion3()
+    {
+        var (svc, tempDir) = BuildService();
+
+        await using var conn = await svc.OpenAsync(localAppDataOverride: tempDir);
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT version FROM schema_migrations WHERE version=3;";
+        var result = await cmd.ExecuteScalarAsync();
+
+        Assert.NotNull(result);
+        Assert.Equal(3L, result);
+    }
 }

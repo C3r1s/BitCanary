@@ -16,45 +16,13 @@ public sealed class LocalMessageRepositoryTests : IAsyncDisposable
     {
         _conn = new SqliteConnection("Data Source=:memory:");
         _conn.Open();
-        ApplySchema(_conn);
+        DatabaseService.ApplySchemaForTestAsync(_conn).GetAwaiter().GetResult();
         _repo = new LocalMessageRepository(_conn);
     }
 
     public async ValueTask DisposeAsync()
     {
         await _conn.DisposeAsync();
-    }
-
-    private static void ApplySchema(SqliteConnection conn)
-    {
-        using var cmd = conn.CreateCommand();
-        cmd.CommandText = """
-            CREATE TABLE IF NOT EXISTS chats (
-                id                   TEXT PRIMARY KEY NOT NULL,
-                name                 TEXT NOT NULL,
-                type                 INTEGER NOT NULL,
-                last_message_preview TEXT NULL,
-                unread_count         INTEGER NOT NULL DEFAULT 0,
-                updated_at           TEXT NOT NULL
-            );
-
-            CREATE TABLE IF NOT EXISTS messages (
-                id                   TEXT PRIMARY KEY NOT NULL,
-                chat_id              TEXT NOT NULL REFERENCES chats(id),
-                sender_id            TEXT NOT NULL,
-                client_message_id    TEXT NOT NULL UNIQUE,
-                protocol_version     INTEGER NOT NULL DEFAULT 0,
-                encrypted_payload    TEXT NOT NULL,
-                key_envelope         TEXT NOT NULL,
-                encryption_algorithm TEXT NOT NULL,
-                sent_at              TEXT NOT NULL,
-                plaintext_body       TEXT NULL
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_messages_chat_sent
-                ON messages(chat_id, sent_at);
-            """;
-        cmd.ExecuteNonQuery();
     }
 
     private static ChatSummaryDto MakeChatDto(Guid? id = null) => new(
@@ -156,5 +124,56 @@ public sealed class LocalMessageRepositoryTests : IAsyncDisposable
         var results = await _repo.GetMessagesAsync(chatId);
 
         Assert.Single(results);
+    }
+
+    // ── Test 6: UpdatePlaintextBodyAsync sets plaintext and is idempotent ─
+
+    [Fact]
+    public async Task UpdatePlaintextBodyAsync_SetsPlaintext_OnlyWhenNull()
+    {
+        var chatId = Guid.NewGuid();
+        await _repo.UpsertChatAsync(MakeChatDto(chatId));
+
+        var msg = MakeMessageDto(chatId);
+        await _repo.SaveMessageAsync(msg);
+
+        // First call: sets plaintext_body
+        await _repo.UpdatePlaintextBodyAsync(msg.Id, "hello world");
+
+        await using var verifyCmd = _conn.CreateCommand();
+        verifyCmd.CommandText = "SELECT plaintext_body FROM messages WHERE id = @id";
+        verifyCmd.Parameters.AddWithValue("@id", msg.Id.ToString());
+        var stored = (string?)(await verifyCmd.ExecuteScalarAsync());
+        Assert.Equal("hello world", stored);
+
+        // Second call: idempotent — should NOT overwrite
+        await _repo.UpdatePlaintextBodyAsync(msg.Id, "different text");
+
+        await using var verifyCmd2 = _conn.CreateCommand();
+        verifyCmd2.CommandText = "SELECT plaintext_body FROM messages WHERE id = @id";
+        verifyCmd2.Parameters.AddWithValue("@id", msg.Id.ToString());
+        var stored2 = (string?)(await verifyCmd2.ExecuteScalarAsync());
+        Assert.Equal("hello world", stored2);
+    }
+
+    // ── Test 7: UpdatePlaintextBodyAsync populates FTS index ─────────────
+
+    [Fact]
+    public async Task UpdatePlaintextBodyAsync_PopulatesFtsIndex()
+    {
+        var chatId = Guid.NewGuid();
+        await _repo.UpsertChatAsync(MakeChatDto(chatId));
+
+        var msg = MakeMessageDto(chatId);
+        await _repo.SaveMessageAsync(msg);
+
+        await _repo.UpdatePlaintextBodyAsync(msg.Id, "searchable content");
+
+        await using var ftsCmd = _conn.CreateCommand();
+        ftsCmd.CommandText = "SELECT rowid FROM messages_fts WHERE messages_fts MATCH @term";
+        ftsCmd.Parameters.AddWithValue("@term", "searchable");
+        var rowid = await ftsCmd.ExecuteScalarAsync();
+
+        Assert.NotNull(rowid);
     }
 }

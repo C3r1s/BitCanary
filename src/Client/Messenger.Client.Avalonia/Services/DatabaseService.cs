@@ -43,6 +43,7 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         await EnableWalAsync(conn, cancellationToken);
         await ApplySchemaAsync(conn, cancellationToken);
         await MigrateToV2Async(conn, cancellationToken);
+        await MigrateToV3Async(conn, cancellationToken);
 
         return conn;
     }
@@ -76,6 +77,7 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
     {
         await ApplySchemaAsync(conn, ct);
         await MigrateToV2Async(conn, ct);
+        await MigrateToV3Async(conn, ct);
     }
 
     private static async Task EnableWalAsync(SqliteConnection conn, CancellationToken ct)
@@ -163,5 +165,74 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         await using var cmd4 = conn.CreateCommand();
         cmd4.CommandText = "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (2, datetime('now', 'utc'))";
         await cmd4.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task MigrateToV3Async(SqliteConnection conn, CancellationToken ct)
+    {
+        await using var checkCmd = conn.CreateCommand();
+        checkCmd.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE version = 3";
+        var count = (long)(await checkCmd.ExecuteScalarAsync(ct))!;
+        if (count > 0) return;
+
+        // FTS5 virtual table for full-text search over decrypted message bodies.
+        // content_rowid='rowid' uses the implicit integer rowid (NOT the UUID id column) — Pitfall 1.
+        await using var cmd1 = conn.CreateCommand();
+        cmd1.CommandText = """
+            CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
+                plaintext_body,
+                content='messages',
+                content_rowid='rowid',
+                tokenize='unicode61 remove_diacritics 1'
+            )
+            """;
+        await cmd1.ExecuteNonQueryAsync(ct);
+
+        // AFTER INSERT trigger — index new plaintext rows
+        await using var cmd2 = conn.CreateCommand();
+        cmd2.CommandText = """
+            CREATE TRIGGER IF NOT EXISTS messages_ai
+            AFTER INSERT ON messages BEGIN
+                INSERT INTO messages_fts(rowid, plaintext_body)
+                VALUES (new.rowid, new.plaintext_body);
+            END
+            """;
+        await cmd2.ExecuteNonQueryAsync(ct);
+
+        // AFTER DELETE trigger — remove deleted rows from FTS index
+        await using var cmd3 = conn.CreateCommand();
+        cmd3.CommandText = """
+            CREATE TRIGGER IF NOT EXISTS messages_ad
+            AFTER DELETE ON messages BEGIN
+                INSERT INTO messages_fts(messages_fts, rowid, plaintext_body)
+                VALUES ('delete', old.rowid, old.plaintext_body);
+            END
+            """;
+        await cmd3.ExecuteNonQueryAsync(ct);
+
+        // AFTER UPDATE trigger — update FTS index when plaintext_body changes
+        await using var cmd4 = conn.CreateCommand();
+        cmd4.CommandText = """
+            CREATE TRIGGER IF NOT EXISTS messages_au
+            AFTER UPDATE OF plaintext_body ON messages BEGIN
+                INSERT INTO messages_fts(messages_fts, rowid, plaintext_body)
+                VALUES ('delete', old.rowid, old.plaintext_body);
+                INSERT INTO messages_fts(rowid, plaintext_body)
+                VALUES (new.rowid, new.plaintext_body);
+            END
+            """;
+        await cmd4.ExecuteNonQueryAsync(ct);
+
+        // Backfill existing plaintext rows into FTS index
+        await using var cmd5 = conn.CreateCommand();
+        cmd5.CommandText = """
+            INSERT INTO messages_fts(rowid, plaintext_body)
+            SELECT rowid, plaintext_body FROM messages
+            WHERE plaintext_body IS NOT NULL AND plaintext_body != ''
+            """;
+        await cmd5.ExecuteNonQueryAsync(ct);
+
+        await using var cmd6 = conn.CreateCommand();
+        cmd6.CommandText = "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (3, datetime('now', 'utc'))";
+        await cmd6.ExecuteNonQueryAsync(ct);
     }
 }

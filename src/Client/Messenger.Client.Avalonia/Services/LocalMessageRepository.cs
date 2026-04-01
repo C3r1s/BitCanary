@@ -92,6 +92,26 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
         return count > 0;
     }
 
+    /// <inheritdoc/>
+    public async Task UpdatePlaintextBodyAsync(
+        Guid messageId,
+        string plaintextBody,
+        CancellationToken ct = default)
+    {
+        await using var cmd = connection.CreateCommand();
+        // Guard: AND (plaintext_body IS NULL OR plaintext_body = '') prevents redundant FTS trigger
+        // churn on already-indexed rows (idempotency requirement from SRCH-01).
+        cmd.CommandText = """
+            UPDATE messages
+            SET plaintext_body = @plaintext
+            WHERE id = @id
+              AND (plaintext_body IS NULL OR plaintext_body = '')
+            """;
+        cmd.Parameters.AddWithValue("@plaintext", plaintextBody);
+        cmd.Parameters.AddWithValue("@id", messageId.ToString());
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
     // ── Chats ─────────────────────────────────────────────────────────────
 
     /// <inheritdoc/>

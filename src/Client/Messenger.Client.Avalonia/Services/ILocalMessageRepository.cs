@@ -10,6 +10,13 @@ public interface ILocalMessageRepository
     Task<IReadOnlyList<MessageDto>> GetMessagesAsync(Guid chatId, CancellationToken cancellationToken = default);
     Task<bool> MessageExistsAsync(Guid clientMessageId, CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// Persists decrypted plaintext to messages.plaintext_body for FTS5 indexing.
+    /// Idempotent: the UPDATE is guarded by <c>AND (plaintext_body IS NULL OR plaintext_body = '')</c>
+    /// so already-indexed rows are not touched and the FTS5 update trigger does not fire again.
+    /// </summary>
+    Task UpdatePlaintextBodyAsync(Guid messageId, string plaintextBody, CancellationToken ct = default);
+
     // ── Chats ─────────────────────────────────────────────────────────────
     Task UpsertChatAsync(ChatSummaryDto chat, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ChatSummaryDto>> GetChatsAsync(CancellationToken cancellationToken = default);

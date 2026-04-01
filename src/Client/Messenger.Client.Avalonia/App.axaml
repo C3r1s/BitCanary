@@ -26,5 +26,10 @@
       <Setter Property="HorizontalAlignment" Value="Right" />
       <Setter Property="Background" Value="#23534B" />
     </Style>
+
+    <Style Selector="Border.message-bubble.highlighted">
+      <Setter Property="BorderBrush" Value="#2C7A7B" />
+      <Setter Property="BorderThickness" Value="3,0,0,0" />
+    </Style>
   </Application.Styles>
 </Application>

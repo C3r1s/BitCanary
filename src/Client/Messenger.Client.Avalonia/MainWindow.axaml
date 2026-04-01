@@ -65,13 +65,22 @@
               Padding="20,16"
               CornerRadius="24"
               Background="#102633">
-        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="12">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12">
           <StackPanel Spacing="4">
             <TextBlock Text="Messenger" FontSize="24" FontWeight="SemiBold" Foreground="White" />
             <TextBlock Text="{Binding StatusMessage}" Opacity="0.8" Foreground="White" />
           </StackPanel>
 
-          <Border Grid.Column="1"
+          <!-- Search icon button -->
+          <Button Grid.Column="1"
+                  MinWidth="44"
+                  MinHeight="44"
+                  Content="&#128269;"
+                  Command="{Binding ToggleGlobalSearchCommand}"
+                  Background="Transparent"
+                  ToolTip.Tip="Search messages" />
+
+          <Border Grid.Column="2"
                   VerticalAlignment="Center"
                   Background="#17384C"
                   CornerRadius="999"
@@ -79,17 +88,17 @@
             <TextBlock Text="{Binding Settings.ConnectionStatus}" Foreground="White" />
           </Border>
 
-          <Button Grid.Column="2"
+          <Button Grid.Column="3"
                   MinWidth="90"
                   Command="{Binding RefreshCommand}"
                   Content="Refresh" />
 
-          <Button Grid.Column="3"
+          <Button Grid.Column="4"
                   MinWidth="90"
                   Command="{Binding LogoutCommand}"
                   Content="Log out" />
 
-          <Button Grid.Column="4"
+          <Button Grid.Column="5"
                   MinWidth="70"
                   Command="{Binding ExitCommand}"
                   Content="Exit"

@@ -3,9 +3,41 @@
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
              x:Class="Messenger.Client.Avalonia.Views.ChatWindowView"
              x:DataType="vm:ChatWindowViewModel">
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="Ctrl+F" Command="{Binding OpenFindBarCommand}" />
+  </UserControl.KeyBindings>
+
   <Border Classes="surface-card">
-    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="12">
-      <StackPanel Spacing="4">
+    <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="12">
+
+      <!-- Row 0: Find-bar (collapsible) -->
+      <Border Grid.Row="0"
+              IsVisible="{Binding IsFindBarVisible}"
+              Background="#17384C"
+              CornerRadius="8"
+              Padding="8,4"
+              Margin="0,0,0,4">
+        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+          <TextBox Text="{Binding FindQuery, Mode=TwoWay}"
+                   Watermark="Find in conversation..."
+                   FontSize="16"
+                   Name="FindQueryBox" />
+          <TextBlock Grid.Column="1"
+                     Text="{Binding FindMatchSummary}"
+                     FontSize="13"
+                     Opacity="0.7"
+                     VerticalAlignment="Center" />
+          <Button Grid.Column="2"
+                  Content="X"
+                  Command="{Binding CloseFindBarCommand}"
+                  ToolTip.Tip="Close find bar"
+                  Background="Transparent"
+                  Padding="8,4" />
+        </Grid>
+      </Border>
+
+      <!-- Row 1: Chat header (title, subtitle, safety number) -->
+      <StackPanel Grid.Row="1" Spacing="4">
         <TextBlock Text="{Binding Title}" FontSize="24" FontWeight="SemiBold" />
         <TextBlock Text="{Binding Subtitle}" Opacity="0.7" />
 
@@ -49,12 +81,14 @@
         </StackPanel>
       </StackPanel>
 
-      <TextBlock Grid.Row="1"
+      <!-- Row 2: Typing status -->
+      <TextBlock Grid.Row="2"
                  Text="{Binding TypingStatus}"
                  FontStyle="Italic"
                  Opacity="0.8" />
 
-      <ScrollViewer Grid.Row="2" Name="MessagesScroll">
+      <!-- Row 3: Messages scroll view -->
+      <ScrollViewer Grid.Row="3" Name="MessagesScroll">
         <ItemsControl ItemsSource="{Binding Messages}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:MessageItemViewModel">
@@ -62,6 +96,7 @@
                 <!-- Normal message bubble (IsSystemBanner = false) -->
                 <Border Classes="message-bubble"
                         Classes.outgoing="{Binding IsOutgoing}"
+                        Classes.highlighted="{Binding IsHighlighted}"
                         IsVisible="{Binding !IsSystemBanner}">
                   <StackPanel Spacing="6">
                     <TextBlock Text="{Binding SenderDisplayName}" FontWeight="SemiBold" />

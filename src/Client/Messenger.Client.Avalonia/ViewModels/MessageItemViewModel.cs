@@ -1,3 +1,4 @@
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace Messenger.Client.Avalonia.ViewModels;
@@ -9,6 +10,10 @@ public sealed partial class MessageItemViewModel : ViewModelBase
     public required string DisplayText { get; init; }
     public required string Timestamp { get; init; }
     public required bool IsOutgoing { get; init; }
+
+    /// <summary>Set by per-chat find-bar logic to show accent left-border on matching messages.</summary>
+    [ObservableProperty]
+    private bool _isHighlighted;
 
     // Banner support — optional, only set for system banner messages
     public bool IsSystemBanner { get; init; }

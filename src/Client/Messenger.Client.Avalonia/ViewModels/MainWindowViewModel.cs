@@ -9,6 +9,7 @@ using Messenger.Client.Avalonia.Services.Crypto;
 using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
 using Messenger.Shared.Contracts.Realtime;
+using SearchResult = Messenger.Client.Avalonia.Services.SearchResult;
 
 namespace Messenger.Client.Avalonia.ViewModels;
 
@@ -25,6 +26,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly IRatchetSessionRepository _sessionRepository;
     private readonly HashSet<string> _blockedSessions = new();
     private readonly Dictionary<Guid, List<MessageDto>> _messageCache = new();
+    private readonly ILocalSearchService _localSearchService;
 
     [ObservableProperty]
     private string _statusMessage = "Loading local cache...";
@@ -48,6 +50,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     public SafetyNumberViewModel SafetyNumber { get; }
 
     public IRelayCommand ShowSafetyNumberCommand { get; }
+
+    public IRelayCommand ToggleGlobalSearchCommand { get; }
 
     public ChatListViewModel ChatList { get; }
 
@@ -77,7 +81,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         KeyPublicationService keyPublicationService,
         ISafetyNumberService safetyNumberService,
         IRatchetSessionRepository sessionRepository,
-        IIdentityKeyChangeDetector changeDetector)
+        IIdentityKeyChangeDetector changeDetector,
+        ILocalSearchService localSearchService)
     {
         _apiClient = apiClient;
         _realtimeClient = realtimeClient;
@@ -88,6 +93,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _keyPublicationService = keyPublicationService;
         _safetyNumberService = safetyNumberService;
         _sessionRepository = sessionRepository;
+        _localSearchService = localSearchService;
 
         SafetyNumber = new SafetyNumberViewModel(
             _safetyNumberService,
@@ -95,6 +101,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             () => IsShowingSafetyNumber = false);
 
         ChatList = new ChatListViewModel(RefreshRemoteDataAsync);
+
+        // Wire global search
+        var searchVm = new SearchViewModel(_localSearchService, NavigateToSearchResult);
+        ChatList.Search = searchVm;
+        ToggleGlobalSearchCommand = new RelayCommand(() => ChatList.ToggleSearchCommand.Execute(null));
 
         ShowSafetyNumberCommand = new RelayCommand(
             () => _ = ShowSafetyNumberAsync(),
@@ -138,6 +149,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _realtimeClient.OtpkSupplyLow += HandleOtpkSupplyLowAsync;
 
         changeDetector.IdentityKeyChanged += HandleIdentityKeyChangedAsync;
+    }
+
+    private void NavigateToSearchResult(SearchResultItemViewModel result)
+    {
+        // Close global search mode
+        ChatList.IsSearchMode = false;
+        ChatList.Search?.Reset();
+
+        // Find and select the chat matching result.ChatId
+        var chatItem = ChatList.Chats.FirstOrDefault(c => c.Id == result.ChatId);
+        if (chatItem is not null)
+        {
+            ChatList.SelectedChat = chatItem;
+        }
+        // v1: navigating to the chat is sufficient; scrolling to specific message is a stretch goal
     }
 
     private void Logout()

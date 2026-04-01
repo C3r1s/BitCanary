@@ -18,8 +18,68 @@ public sealed partial class ChatWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isSessionVerified;
 
+    [ObservableProperty]
+    private bool _isFindBarVisible;
+
+    [ObservableProperty]
+    private string _findQuery = string.Empty;
+
+    [ObservableProperty]
+    private string _findMatchSummary = string.Empty;
+
     /// <summary>Set by MainWindowViewModel to forward ShowSafetyNumberCommand into the header.</summary>
     public IRelayCommand? ShowSafetyNumberCommand { get; set; }
 
+    public IRelayCommand OpenFindBarCommand { get; }
+
+    public IRelayCommand CloseFindBarCommand { get; }
+
     public ObservableCollection<MessageItemViewModel> Messages { get; } = new();
+
+    public ChatWindowViewModel()
+    {
+        OpenFindBarCommand = new RelayCommand(() => IsFindBarVisible = true);
+        CloseFindBarCommand = new RelayCommand(() =>
+        {
+            IsFindBarVisible = false;
+            FindQuery = string.Empty;
+            ClearHighlights();
+            FindMatchSummary = string.Empty;
+        });
+    }
+
+    partial void OnFindQueryChanged(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            ClearHighlights();
+            FindMatchSummary = string.Empty;
+            return;
+        }
+
+        var matchCount = 0;
+        foreach (var message in Messages)
+        {
+            if (!message.IsSystemBanner &&
+                message.DisplayText.Contains(value, StringComparison.OrdinalIgnoreCase))
+            {
+                message.IsHighlighted = true;
+                matchCount++;
+            }
+            else
+            {
+                message.IsHighlighted = false;
+            }
+        }
+
+        FindMatchSummary = matchCount == 1 ? "1 match" : $"{matchCount} matches";
+    }
+
+    private void ClearHighlights()
+    {
+        foreach (var message in Messages)
+        {
+            message.IsHighlighted = false;
+        }
+    }
 }

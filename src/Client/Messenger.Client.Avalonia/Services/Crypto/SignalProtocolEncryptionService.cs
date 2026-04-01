@@ -13,6 +13,10 @@ namespace Messenger.Client.Avalonia.Services;
 ///
 /// Legacy messages (ProtocolVersion.LegacyAes) are delegated to LocalEnvelopeEncryptionService
 /// for backwards-compatible decryption (D-03).
+///
+/// After successful decryption, plaintext is persisted to messages.plaintext_body via
+/// <see cref="ILocalMessageRepository.UpdatePlaintextBodyAsync"/> so the FTS5 search
+/// index stays current (SRCH-01, Phase 05).
 /// </summary>
 public sealed class SignalProtocolEncryptionService(
     Crypto.IX3DHService x3dh,
@@ -22,7 +26,8 @@ public sealed class SignalProtocolEncryptionService(
     IClientSessionService sessionService,
     LocalEnvelopeEncryptionService legacyService,
     Crypto.IRatchetSessionRepository sessionRepository,
-    Crypto.IIdentityKeyChangeDetector changeDetector) : IEncryptionService
+    Crypto.IIdentityKeyChangeDetector changeDetector,
+    ILocalMessageRepository localMessageRepository) : IEncryptionService
 {
     public async Task<EncryptedMessageDraft> EncryptTextAsync(
         string plaintext, Guid recipientUserId, CancellationToken cancellationToken = default)
@@ -107,7 +112,13 @@ public sealed class SignalProtocolEncryptionService(
         // Per D-03: delegate legacy messages to LocalEnvelopeEncryptionService
         if (message.ProtocolVersion == ProtocolVersion.LegacyAes)
         {
-            return await legacyService.DecryptAsync(message, cancellationToken);
+            var legacyPlaintext = await legacyService.DecryptAsync(message, cancellationToken);
+            // Persist plaintext for FTS5 search index (legacy path)
+            if (!legacyPlaintext.StartsWith("[Unable to decrypt]", StringComparison.Ordinal))
+            {
+                await localMessageRepository.UpdatePlaintextBodyAsync(message.Id, legacyPlaintext, cancellationToken);
+            }
+            return legacyPlaintext;
         }
 
         try
@@ -196,7 +207,12 @@ public sealed class SignalProtocolEncryptionService(
             var plaintextBytes = await sessionManager.DecryptAsync(
                 sessionId, ciphertext, ratchetPub, pn, n, associatedData, cancellationToken);
 
-            return Encoding.UTF8.GetString(plaintextBytes);
+            var plaintext = Encoding.UTF8.GetString(plaintextBytes);
+
+            // Persist plaintext for FTS5 search index (trigger updates messages_fts automatically)
+            await localMessageRepository.UpdatePlaintextBodyAsync(message.Id, plaintext, cancellationToken);
+
+            return plaintext;
         }
         catch (Exception)
         {

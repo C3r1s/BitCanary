@@ -44,6 +44,8 @@ public static class ServiceCollectionExtensions
         });
         services.AddSingleton<ILocalMessageRepository>(sp =>
             new LocalMessageRepository(sp.GetRequiredService<SqliteConnection>()));
+        services.AddSingleton<ILocalSearchService>(sp =>
+            new LocalSearchService(sp.GetRequiredService<SqliteConnection>()));
         services.AddSingleton<IRatchetSessionRepository>(sp =>
             new RatchetSessionRepository(sp.GetRequiredService<SqliteConnection>()));
 

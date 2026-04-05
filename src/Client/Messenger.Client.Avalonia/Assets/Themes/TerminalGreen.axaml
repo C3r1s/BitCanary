@@ -1,0 +1,26 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Sentinel key used by ThemeService to identify and remove terminal dictionaries -->
+  <x:Boolean x:Key="IsTerminalTheme">True</x:Boolean>
+
+  <!-- Matrix green color scheme -->
+  <!-- Background / surface colors -->
+  <Color x:Key="TerminalBackgroundColor">#0D0D0D</Color>
+  <Color x:Key="TerminalSurfaceColor">#111111</Color>
+  <Color x:Key="TerminalTextColor">#00FF41</Color>
+  <Color x:Key="TerminalAccentColor">#00CC33</Color>
+
+  <SolidColorBrush x:Key="SystemControlBackgroundAltHighBrush" Color="#0D0D0D" />
+  <SolidColorBrush x:Key="SystemControlBackgroundChromeMediumBrush" Color="#111111" />
+  <SolidColorBrush x:Key="SystemControlForegroundBaseHighBrush" Color="#00FF41" />
+  <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#00CC33" />
+  <SolidColorBrush x:Key="SystemControlForegroundBaseMediumBrush" Color="#00CC33" />
+  <SolidColorBrush x:Key="SystemControlForegroundBaseLowBrush" Color="#007A1F" />
+
+  <!-- Application background -->
+  <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="#0D0D0D" />
+  <SolidColorBrush x:Key="SystemControlAcrylicWindowBrush" Color="#0D0D0D" />
+
+  <!-- Monospace font -->
+  <FontFamily x:Key="ContentControlThemeFontFamily">Consolas, JetBrains Mono, Courier New, monospace</FontFamily>
+</ResourceDictionary>

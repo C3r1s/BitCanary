@@ -6,4 +6,5 @@ public interface IThemeService
 {
     ThemePreference CurrentTheme { get; }
     void Apply(ThemePreference themePreference);
+    void ApplyTerminalScheme(TerminalColorScheme scheme);
 }

@@ -80,6 +80,56 @@ public sealed class KeyPublicationService(
     }
 
     /// <summary>
+    /// Regenerates the identity key, signs a new SPK, and re-publishes the entire key bundle.
+    /// All existing sessions will see a safety number change on next contact.
+    /// Failures are logged as warnings — callers should handle gracefully.
+    /// </summary>
+    public async Task RegenerateAndPublishAsync(CancellationToken ct = default)
+    {
+        logger.LogInformation("Regenerating identity key and re-publishing bundle.");
+
+        // Generate entirely new bundle (new IK, SPK, and OPKs)
+        _localBundle = x3dh.GenerateKeyBundle();
+        var otpKeys = x3dh.GenerateOneTimePreKeys(InitialOtpkCount);
+
+        // Clear old local key material from cache by overwriting with new keys
+        await localCacheService.SaveAsync(IkPrivateCacheKey, keyStore.ProtectToBase64(_localBundle.IkPrivate), ct);
+        await localCacheService.SaveAsync(SpkPrivateCacheKey, keyStore.ProtectToBase64(_localBundle.SpkPrivate), ct);
+        await localCacheService.SaveAsync(IkPublicCacheKey, Convert.ToBase64String(_localBundle.IkPublic), ct);
+        await localCacheService.SaveAsync(SpkPublicCacheKey, Convert.ToBase64String(_localBundle.SpkPublic), ct);
+        await localCacheService.SaveAsync(SpkSignatureCacheKey, Convert.ToBase64String(_localBundle.SpkSignature), ct);
+        await localCacheService.SaveAsync(SpkCreatedAtCacheKey, _localBundle.SpkCreatedAt.ToString("O"), ct);
+
+        // Upload identity + pre-key bundle (null DeviceId so server assigns a new one)
+        var resp = await apiClient.UploadKeyBundleAsync(
+            new KeyBundleUploadRequest(
+                null,
+                _localBundle.IkPublic,
+                _localBundle.SpkPublic,
+                _localBundle.SpkSignature),
+            ct);
+
+        // Persist new device ID
+        await localCacheService.SaveAsync(DeviceIdCacheKey, resp.DeviceId.ToString(), ct);
+
+        // Upload fresh OPKs
+        var otpResp = await apiClient.ReplenishOtpksAsync(
+            new OtpkReplenishRequest(resp.DeviceId, otpKeys.Select(k => k.Public).ToArray()), ct);
+
+        // Replace OTP private key store
+        _otpPrivates = otpKeys.ToDictionary(
+            k => Convert.ToBase64String(k.Public),
+            k => keyStore.ProtectToBase64(k.Private));
+        await localCacheService.SaveAsync(OtpPrivatesCacheKey, _otpPrivates, ct);
+
+        _otpById = new Dictionary<Guid, OtpKeyPair>();
+        PopulateOtpById(otpResp.AssignedIds, otpKeys);
+        await PersistOtpIdMapAsync(ct);
+
+        logger.LogInformation("Identity key regeneration complete. DeviceId={DeviceId}", resp.DeviceId);
+    }
+
+    /// <summary>
     /// Replenishes OPKs when the server signals the pool is low (D-09).
     /// </summary>
     public async Task ReplenishOtpksAsync(CancellationToken ct = default)

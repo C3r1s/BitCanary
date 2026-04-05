@@ -1,31 +1,87 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
+             xmlns:models="using:Messenger.Client.Avalonia.Models"
              x:Class="Messenger.Client.Avalonia.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
   <Border Classes="surface-card">
-    <StackPanel Spacing="16">
-      <StackPanel Spacing="4">
-        <TextBlock Text="Settings" FontSize="22" FontWeight="SemiBold" />
-        <TextBlock Text="{Binding ConnectionStatus}" Opacity="0.72" TextWrapping="Wrap" />
-      </StackPanel>
+    <ScrollViewer>
+      <StackPanel Spacing="16" Margin="0,0,8,0">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Settings" FontSize="22" FontWeight="SemiBold" />
+          <TextBlock Text="{Binding ConnectionStatus}" Opacity="0.72" TextWrapping="Wrap" />
+        </StackPanel>
 
-      <StackPanel Spacing="8">
-        <TextBlock Text="Theme" FontWeight="SemiBold" />
-        <ComboBox ItemsSource="{Binding ThemeOptions}"
-                  SelectedItem="{Binding SelectedThemeOption, Mode=TwoWay}">
-          <ComboBox.ItemTemplate>
-            <DataTemplate>
-              <TextBlock Text="{Binding Label}" />
-            </DataTemplate>
-          </ComboBox.ItemTemplate>
-        </ComboBox>
-        <Button Command="{Binding SaveThemeCommand}" Content="Apply Theme" />
-      </StackPanel>
+        <!-- Theme section -->
+        <StackPanel Spacing="8">
+          <TextBlock Text="Theme" FontWeight="SemiBold" />
+          <ComboBox ItemsSource="{Binding ThemeOptions}"
+                    SelectedItem="{Binding SelectedThemeOption, Mode=TwoWay}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
 
-      <CheckBox Content="Send by Enter" IsChecked="{Binding SendByEnter, Mode=TwoWay}" />
-      <CheckBox Content="Compact Mode" IsChecked="{Binding UseCompactMode, Mode=TwoWay}" />
-      <CheckBox Content="Custom Emoji Enabled" IsChecked="{Binding EnableCustomEmoji, Mode=TwoWay}" />
-    </StackPanel>
+          <!-- Terminal sub-scheme picker — only visible when Terminal is selected -->
+          <ComboBox IsVisible="{Binding IsTerminalThemeSelected}"
+                    ItemsSource="{Binding TerminalSchemeOptions}"
+                    SelectedItem="{Binding SelectedTerminalScheme, Mode=TwoWay}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate>
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+
+          <Button Command="{Binding SaveThemeCommand}" Content="Apply Theme" />
+        </StackPanel>
+
+        <CheckBox Content="Send by Enter" IsChecked="{Binding SendByEnter, Mode=TwoWay}" />
+        <CheckBox Content="Compact Mode" IsChecked="{Binding UseCompactMode, Mode=TwoWay}" />
+        <CheckBox Content="Custom Emoji Enabled" IsChecked="{Binding EnableCustomEmoji, Mode=TwoWay}" />
+
+        <!-- Encryption section -->
+        <StackPanel Spacing="8">
+          <TextBlock Text="Encryption" FontSize="18" FontWeight="SemiBold" />
+          <TextBlock Text="Signal Protocol v1" FontSize="16" />
+          <TextBlock Text="{Binding SpkRotationDate}" Opacity="0.72" />
+
+          <Button Content="View Safety Number"
+                  IsEnabled="{Binding CanShowSafetyNumber}"
+                  Command="{Binding ShowSafetyNumberCommand}" />
+
+          <Button Content="Regenerate Identity Key"
+                  Background="#5C1A1A"
+                  Foreground="White"
+                  IsEnabled="{Binding !IsRegenerating}"
+                  Command="{Binding ShowRegenerateConfirmCommand}" />
+
+          <!-- Confirmation overlay (inline) -->
+          <Border IsVisible="{Binding IsConfirmingRegenerate}"
+                  Background="#2A1010"
+                  CornerRadius="6"
+                  Padding="12"
+                  BorderBrush="#5C1A1A"
+                  BorderThickness="1">
+            <StackPanel Spacing="10">
+              <TextBlock TextWrapping="Wrap"
+                         Text="This will invalidate all existing sessions. All contacts will see a safety number change alert. Continue?" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Yes, Regenerate"
+                        Background="#5C1A1A"
+                        Foreground="White"
+                        IsEnabled="{Binding !IsRegenerating}"
+                        Command="{Binding RegenerateIdentityKeyCommand}" />
+                <Button Content="Cancel"
+                        Command="{Binding CancelRegenerateCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+      </StackPanel>
+    </ScrollViewer>
   </Border>
 </UserControl>

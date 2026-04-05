@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
+             xmlns:views="using:Messenger.Client.Avalonia.Views"
              x:Class="Messenger.Client.Avalonia.Views.ChatWindowView"
              x:DataType="vm:ChatWindowViewModel">
   <Border Classes="surface-card">
@@ -99,16 +100,36 @@
             <DataTemplate x:DataType="vm:MessageItemViewModel">
               <Panel>
                 <!-- Normal message bubble (IsSystemBanner = false) -->
-                <Border Classes="message-bubble"
-                        Classes.outgoing="{Binding IsOutgoing}"
-                        Classes.highlighted="{Binding IsHighlighted}"
-                        IsVisible="{Binding !IsSystemBanner}">
-                  <StackPanel Spacing="6">
-                    <TextBlock Text="{Binding SenderDisplayName}" FontWeight="SemiBold" />
-                    <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
-                    <TextBlock Text="{Binding Timestamp}" Opacity="0.7" HorizontalAlignment="Right" />
-                  </StackPanel>
-                </Border>
+                <Grid ColumnDefinitions="Auto,*"
+                      IsVisible="{Binding !IsSystemBanner}">
+
+                  <!-- Avatar for incoming messages (left of bubble) -->
+                  <views:AvatarControl Grid.Column="0"
+                                       DisplayName="{Binding SenderDisplayName}"
+                                       IsVisible="{Binding !IsOutgoing}"
+                                       VerticalAlignment="Bottom"
+                                       Margin="0,0,8,0" />
+
+                  <!-- Message bubble -->
+                  <Border Grid.Column="1"
+                          Classes="message-bubble"
+                          Classes.outgoing="{Binding IsOutgoing}"
+                          Classes.highlighted="{Binding IsHighlighted}">
+                    <StackPanel Spacing="6">
+                      <TextBlock Text="{Binding SenderDisplayName}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
+                      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
+                        <TextBlock Text="{Binding Timestamp}" Opacity="0.7" />
+                        <!-- Status glyph: only show on outgoing messages -->
+                        <TextBlock Text="{Binding StatusGlyph}"
+                                   FontSize="13"
+                                   Opacity="0.7"
+                                   IsVisible="{Binding IsOutgoing}" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+
+                </Grid>
 
                 <!-- System banner (IsSystemBanner = true) -->
                 <Border Background="#5C1A1A"

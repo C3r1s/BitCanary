@@ -193,6 +193,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             {
                 ShowSafetyNumberCommand.NotifyCanExecuteChanged();
                 OnPropertyChanged(nameof(NoChatSelected));
+                Settings.CanShowSafetyNumber = ChatList.SelectedChat is not null;
                 await LoadSelectedChatAsync();
             }
         };
@@ -205,7 +206,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             SendTypingAsync,
             () => ChatList.SelectedChat?.Id,
             () => _blockedSessions.Contains(GetCurrentSessionId()));
-        Settings = new SettingsViewModel(ChangeThemeAsync);
+        Settings = new SettingsViewModel(
+            ChangeThemeAsync,
+            _keyPublicationService,
+            scheme => _themeService.ApplyTerminalScheme(scheme));
+        Settings.ShowSafetyNumberCommand = ShowSafetyNumberCommand;
         RefreshCommand = new AsyncRelayCommand(RefreshRemoteDataAsync);
         InitializeCommand = new AsyncRelayCommand(InitializeAsync);
         LogoutCommand = new RelayCommand(Logout);
@@ -224,6 +229,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _realtimeClient.TypingReceived += HandleTypingAsync;
         _realtimeClient.PresenceChanged += HandlePresenceChangedAsync;
         _realtimeClient.OtpkSupplyLow += HandleOtpkSupplyLowAsync;
+        _realtimeClient.MessageDelivered += HandleMessageDeliveredAsync;
+        _realtimeClient.MessagesRead += HandleMessagesReadAsync;
 
         changeDetector.IdentityKeyChanged += HandleIdentityKeyChangedAsync;
     }
@@ -302,6 +309,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             await _keyPublicationService.EnsureKeyBundlePublishedAsync();
             StatusMessage = string.Empty;
+            Settings.RefreshSpkRotationDate();
         }
         catch (Exception)
         {
@@ -482,6 +490,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 await ReplaceMessagesAsync(selectedChat.Id, messages);
                 await _localCacheService.SaveAsync(cacheKey, messages);
                 await _realtimeClient.JoinChatAsync(selectedChat.Id);
+                // Notify senders that their messages have been read (D-03, D-07)
+                await _realtimeClient.SendReadReceiptAsync(selectedChat.Id);
                 StatusMessage = $"{selectedChat.Title} ready.";
             }
             catch (System.Net.Http.HttpRequestException)
@@ -651,6 +661,44 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         });
     }
 
+    private async Task HandleMessageDeliveredAsync(Guid messageId)
+    {
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var message = ChatWindow.Messages.FirstOrDefault(m => m.Id == messageId);
+            if (message is not null && message.Status < MessageStatus.Delivered)
+            {
+                message.Status = MessageStatus.Delivered;
+            }
+        });
+
+        // Persist the status update to SQLite
+        await _localMessageRepository.UpdateMessageStatusAsync(messageId, MessageStatus.Delivered);
+    }
+
+    private async Task HandleMessagesReadAsync(Guid chatId, Guid readByUserId)
+    {
+        // Don't update status if the reader is the current user (their own messages aren't "read" by themselves)
+        if (readByUserId == _sessionService.CurrentUserId) return;
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (ChatList.SelectedChat?.Id == chatId)
+            {
+                foreach (var message in ChatWindow.Messages)
+                {
+                    if (message.IsOutgoing && message.Status < MessageStatus.Read)
+                    {
+                        message.Status = MessageStatus.Read;
+                    }
+                }
+            }
+        });
+
+        // Persist all outgoing messages as read in SQLite
+        await _localMessageRepository.MarkMessagesReadAsync(chatId, _sessionService.CurrentUserId);
+    }
+
     private async Task LoadCachedSettingsAsync()
     {
         var settings = await _localCacheService.LoadAsync<UserSettingsDto>("settings");
@@ -672,7 +720,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private void ApplySettings(UserSettingsDto settings)
     {
         _themeService.Apply(settings.ThemePreference);
-        Settings.SelectedThemeOption = Settings.ThemeOptions.First(x => x.Value == settings.ThemePreference);
+        Settings.SelectedThemeOption = Settings.ThemeOptions.FirstOrDefault(x => x.Value == settings.ThemePreference)
+                                    ?? Settings.ThemeOptions[0];
         Settings.SendByEnter = settings.SendByEnter;
         Settings.UseCompactMode = settings.UseCompactMode;
         Settings.EnableCustomEmoji = settings.EnableCustomEmoji;

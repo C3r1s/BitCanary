@@ -18,6 +18,24 @@ public partial class MainWindow : Window
         };
     }
 
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+
+        if (DataContext is not MainWindowViewModel vm) return;
+
+        if (e.Key == Key.F && e.KeyModifiers == KeyModifiers.Control)
+        {
+            vm.ChatWindow.OpenFindBarCommand.Execute(null);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape && vm.ChatWindow.IsFindBarVisible)
+        {
+            vm.ChatWindow.CloseFindBarCommand.Execute(null);
+            e.Handled = true;
+        }
+    }
+
     /// <summary>
     /// Closes the safety number overlay when the scrim (outer Grid) is clicked directly —
     /// not when clicking inside the card.
@@ -27,6 +45,17 @@ public partial class MainWindow : Window
         if (e.Source == sender && DataContext is MainWindowViewModel vm)
         {
             vm.SafetyNumber.CloseCommand.Execute(null);
+        }
+    }
+
+    /// <summary>
+    /// Closes the settings modal overlay when the scrim is clicked directly.
+    /// </summary>
+    private void SettingsScrim_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (e.Source == sender && DataContext is MainWindowViewModel vm)
+        {
+            vm.ToggleSettingsCommand.Execute(null);
         }
     }
 }

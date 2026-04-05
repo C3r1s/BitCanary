@@ -36,8 +36,11 @@ public sealed partial class ChatWindowViewModel : ViewModelBase
 
     public ObservableCollection<MessageItemViewModel> Messages { get; } = new();
 
+    public bool HasNoMessages => Messages.Count == 0;
+
     public ChatWindowViewModel()
     {
+        Messages.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoMessages));
         OpenFindBarCommand = new RelayCommand(() => IsFindBarVisible = true);
         CloseFindBarCommand = new RelayCommand(() =>
         {

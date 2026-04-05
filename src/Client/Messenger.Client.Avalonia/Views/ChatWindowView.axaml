@@ -3,10 +3,6 @@
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
              x:Class="Messenger.Client.Avalonia.Views.ChatWindowView"
              x:DataType="vm:ChatWindowViewModel">
-  <UserControl.KeyBindings>
-    <KeyBinding Gesture="Ctrl+F" Command="{Binding OpenFindBarCommand}" />
-  </UserControl.KeyBindings>
-
   <Border Classes="surface-card">
     <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="12">
 
@@ -87,9 +83,18 @@
                  FontStyle="Italic"
                  Opacity="0.8" />
 
-      <!-- Row 3: Messages scroll view -->
-      <ScrollViewer Grid.Row="3" Name="MessagesScroll">
-        <ItemsControl ItemsSource="{Binding Messages}">
+      <!-- Row 3: Messages area — empty state or scroll view -->
+      <Panel Grid.Row="3">
+        <!-- Empty state when no messages -->
+        <TextBlock Text="No messages yet. Say hello!"
+                   FontSize="16"
+                   Opacity="0.4"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   IsVisible="{Binding HasNoMessages}" />
+
+        <ScrollViewer Name="MessagesScroll" IsVisible="{Binding !HasNoMessages}">
+          <ItemsControl ItemsSource="{Binding Messages}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:MessageItemViewModel">
               <Panel>
@@ -142,7 +147,8 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
-      </ScrollViewer>
+        </ScrollViewer>
+      </Panel>
     </Grid>
   </Border>
 </UserControl>

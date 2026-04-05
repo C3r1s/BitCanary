@@ -46,6 +46,20 @@
     </Grid>
 
     <!-- ═══════════════════════════════════════════════════════════
+         SETTINGS MODAL OVERLAY  (ZIndex=100, same pattern as SafetyNumberView)
+    ═══════════════════════════════════════════════════════════════ -->
+    <Grid IsVisible="{Binding IsShowingSettings}"
+          Background="#C0000000"
+          ZIndex="100"
+          PointerPressed="SettingsScrim_PointerPressed">
+      <Border CornerRadius="20" Padding="32" MaxWidth="520"
+              VerticalAlignment="Center" HorizontalAlignment="Center"
+              Background="{DynamicResource SystemAltHighColor}">
+        <views:SettingsView DataContext="{Binding Settings}" />
+      </Border>
+    </Grid>
+
+    <!-- ═══════════════════════════════════════════════════════════
          LOGIN SCREEN  (shown when IsLoggedIn = false)
     ═══════════════════════════════════════════════════════════════ -->
     <Grid IsVisible="{Binding !IsLoggedIn}"
@@ -56,16 +70,16 @@
     <!-- ═══════════════════════════════════════════════════════════
          MAIN MESSENGER  (shown when IsLoggedIn = true)
     ═══════════════════════════════════════════════════════════════ -->
-    <Grid RowDefinitions="Auto,*"
+    <Grid RowDefinitions="Auto,Auto,*"
           IsVisible="{Binding IsLoggedIn}">
 
-      <!-- Header bar -->
+      <!-- Row 0: Header bar -->
       <Border Grid.Row="0"
               Margin="20,20,20,14"
               Padding="20,16"
               CornerRadius="24"
               Background="#102633">
-        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12">
           <StackPanel Spacing="4">
             <TextBlock Text="Messenger" FontSize="24" FontWeight="SemiBold" Foreground="White" />
             <TextBlock Text="{Binding StatusMessage}" Opacity="0.8" Foreground="White" />
@@ -80,12 +94,34 @@
                   Background="Transparent"
                   ToolTip.Tip="Search messages" />
 
+          <!-- Connection status pill — Online -->
           <Border Grid.Column="2"
                   VerticalAlignment="Center"
-                  Background="#17384C"
+                  Background="#1A3D1A"
                   CornerRadius="999"
-                  Padding="12,6">
-            <TextBlock Text="{Binding Settings.ConnectionStatus}" Foreground="White" />
+                  Padding="12,8"
+                  IsVisible="{Binding IsOnline}">
+            <TextBlock Text="Online" Foreground="#00CC33" FontSize="13" />
+          </Border>
+
+          <!-- Connection status pill — Reconnecting -->
+          <Border Grid.Column="2"
+                  VerticalAlignment="Center"
+                  Background="#3D2800"
+                  CornerRadius="999"
+                  Padding="12,8"
+                  IsVisible="{Binding IsReconnecting}">
+            <TextBlock Text="Reconnecting..." Foreground="#FFB300" FontSize="13" />
+          </Border>
+
+          <!-- Connection status pill — Offline -->
+          <Border Grid.Column="2"
+                  VerticalAlignment="Center"
+                  Background="#3D1414"
+                  CornerRadius="999"
+                  Padding="12,8"
+                  IsVisible="{Binding IsOffline}">
+            <TextBlock Text="Offline" Foreground="#FF6B6B" FontSize="13" />
           </Border>
 
           <Button Grid.Column="3"
@@ -106,20 +142,58 @@
         </Grid>
       </Border>
 
-      <!-- 3-column layout: chat list | chat window + input | settings -->
-      <Grid Grid.Row="1"
+      <!-- Row 1: Offline banner (shown when offline and not dismissed) -->
+      <Border Grid.Row="1"
+              Background="#3D2800"
+              Padding="16,8"
+              Margin="20,0,20,8"
+              IsVisible="{Binding ShowOfflineBanner}">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="Offline &#8212; showing cached messages"
+                     Foreground="#FFB300"
+                     FontSize="13"
+                     VerticalAlignment="Center" />
+          <Button Grid.Column="1"
+                  Content="X"
+                  Command="{Binding DismissOfflineBannerCommand}"
+                  Background="Transparent"
+                  Foreground="#FFB300"
+                  Padding="8,4"
+                  ToolTip.Tip="Dismiss" />
+        </Grid>
+      </Border>
+
+      <!-- Row 2: 2-column layout: chat list | chat window + input -->
+      <Grid Grid.Row="2"
             Margin="20,0,20,20"
-            ColumnDefinitions="300,*,300"
+            ColumnDefinitions="300,*"
             ColumnSpacing="16">
 
         <views:ChatListView DataContext="{Binding ChatList}" />
 
+        <!-- Right panel: empty state OR chat window + input -->
         <Grid Grid.Column="1" RowDefinitions="*,Auto" RowSpacing="16">
-          <views:ChatWindowView DataContext="{Binding ChatWindow}" />
-          <views:MessageInputView Grid.Row="1" DataContext="{Binding MessageInput}" />
+
+          <!-- Empty state when no chat is selected -->
+          <Border Classes="surface-card"
+                  IsVisible="{Binding NoChatSelected}">
+            <TextBlock Text="Select a conversation to start messaging"
+                       FontSize="16"
+                       Opacity="0.4"
+                       HorizontalAlignment="Center"
+                       VerticalAlignment="Center" />
+          </Border>
+
+          <!-- Chat window (hidden when no chat selected) -->
+          <Panel IsVisible="{Binding !NoChatSelected}">
+            <views:ChatWindowView DataContext="{Binding ChatWindow}" />
+          </Panel>
+
+          <Panel Grid.Row="1" IsVisible="{Binding !NoChatSelected}">
+            <views:MessageInputView DataContext="{Binding MessageInput}" />
+          </Panel>
         </Grid>
 
-        <views:SettingsView Grid.Column="2" DataContext="{Binding Settings}" />
       </Grid>
     </Grid>
 

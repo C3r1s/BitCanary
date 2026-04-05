@@ -140,6 +140,17 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
     }
 
     /// <inheritdoc/>
+    public async Task ResetUnreadCountAsync(
+        Guid chatId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = "UPDATE chats SET unread_count = 0 WHERE id = @chatId";
+        cmd.Parameters.AddWithValue("@chatId", chatId.ToString());
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<ChatSummaryDto>> GetChatsAsync(
         CancellationToken cancellationToken = default)
     {

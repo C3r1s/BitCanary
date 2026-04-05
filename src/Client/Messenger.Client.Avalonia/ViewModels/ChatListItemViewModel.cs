@@ -18,9 +18,19 @@ public sealed partial class ChatListItemViewModel : ViewModelBase
     [ObservableProperty]
     private string _subtitle = string.Empty;
 
+    /// <summary>Formatted relative timestamp string (e.g. "5m ago", "14:32", "Mon", "Mar 26").</summary>
     [ObservableProperty]
     private string _lastActivity = string.Empty;
 
     [ObservableProperty]
     private int _unreadCount;
+
+    /// <summary>True when <see cref="UnreadCount"/> is greater than zero; drives unread badge visibility.</summary>
+    public bool HasUnreadMessages => UnreadCount > 0;
+
+    /// <summary>Called by CommunityToolkit.Mvvm when UnreadCount changes; raises HasUnreadMessages notification.</summary>
+    partial void OnUnreadCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasUnreadMessages));
+    }
 }

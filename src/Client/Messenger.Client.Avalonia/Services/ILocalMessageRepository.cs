@@ -20,4 +20,10 @@ public interface ILocalMessageRepository
     // ── Chats ─────────────────────────────────────────────────────────────
     Task UpsertChatAsync(ChatSummaryDto chat, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<ChatSummaryDto>> GetChatsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Resets the unread message count to 0 for the specified chat.
+    /// Called when a chat is opened so the badge disappears (per D-07).
+    /// </summary>
+    Task ResetUnreadCountAsync(Guid chatId, CancellationToken cancellationToken = default);
 }

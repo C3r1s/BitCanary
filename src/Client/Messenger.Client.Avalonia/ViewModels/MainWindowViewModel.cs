@@ -27,6 +27,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly HashSet<string> _blockedSessions = new();
     private readonly Dictionary<Guid, List<MessageDto>> _messageCache = new();
     private readonly ILocalSearchService _localSearchService;
+    private readonly ILocalMessageRepository _localMessageRepository;
 
     [ObservableProperty]
     private string _statusMessage = "Loading local cache...";
@@ -46,6 +47,79 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     [ObservableProperty]
     private bool _isShowingSafetyNumber;
+
+    [ObservableProperty]
+    private bool _isShowingSettings;
+
+    [ObservableProperty]
+    private ConnectionState _connectionState;
+
+    [ObservableProperty]
+    private bool _isOfflineBannerDismissed;
+
+    private DispatcherTimer? _offlineBannerTimer;
+
+    /// <summary>True when ConnectionState is Online.</summary>
+    public bool IsOnline => _connectionState == Messenger.Shared.Contracts.ConnectionState.Online;
+
+    /// <summary>True when ConnectionState is Reconnecting.</summary>
+    public bool IsReconnecting => _connectionState == Messenger.Shared.Contracts.ConnectionState.Reconnecting;
+
+    /// <summary>True when ConnectionState is Offline.</summary>
+    public bool IsOffline => _connectionState == Messenger.Shared.Contracts.ConnectionState.Offline;
+
+    /// <summary>True when offline banner should be shown (offline and not dismissed).</summary>
+    public bool ShowOfflineBanner => IsOffline && !IsOfflineBannerDismissed;
+
+    /// <summary>True when no chat is currently selected.</summary>
+    public bool NoChatSelected => ChatList.SelectedChat is null;
+
+    partial void OnConnectionStateChanged(Messenger.Shared.Contracts.ConnectionState value)
+    {
+        OnPropertyChanged(nameof(IsOnline));
+        OnPropertyChanged(nameof(IsReconnecting));
+        OnPropertyChanged(nameof(IsOffline));
+        OnPropertyChanged(nameof(ShowOfflineBanner));
+
+        // Stop the reappear timer if we go online
+        if (value != Messenger.Shared.Contracts.ConnectionState.Offline)
+        {
+            _offlineBannerTimer?.Stop();
+            _offlineBannerTimer = null;
+            IsOfflineBannerDismissed = false;
+        }
+    }
+
+    partial void OnIsOfflineBannerDismissedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowOfflineBanner));
+    }
+
+    [RelayCommand]
+    private void ToggleSettings()
+    {
+        IsShowingSettings = !IsShowingSettings;
+    }
+
+    [RelayCommand]
+    private void DismissOfflineBanner()
+    {
+        IsOfflineBannerDismissed = true;
+
+        // Reappear after 30s if still offline
+        _offlineBannerTimer?.Stop();
+        _offlineBannerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _offlineBannerTimer.Tick += (_, _) =>
+        {
+            _offlineBannerTimer?.Stop();
+            _offlineBannerTimer = null;
+            if (IsOffline)
+            {
+                IsOfflineBannerDismissed = false;
+            }
+        };
+        _offlineBannerTimer.Start();
+    }
 
     public SafetyNumberViewModel SafetyNumber { get; }
 
@@ -82,7 +156,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ISafetyNumberService safetyNumberService,
         IRatchetSessionRepository sessionRepository,
         IIdentityKeyChangeDetector changeDetector,
-        ILocalSearchService localSearchService)
+        ILocalSearchService localSearchService,
+        ILocalMessageRepository localMessageRepository)
     {
         _apiClient = apiClient;
         _realtimeClient = realtimeClient;
@@ -94,6 +169,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _safetyNumberService = safetyNumberService;
         _sessionRepository = sessionRepository;
         _localSearchService = localSearchService;
+        _localMessageRepository = localMessageRepository;
 
         SafetyNumber = new SafetyNumberViewModel(
             _safetyNumberService,
@@ -116,6 +192,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             if (args.PropertyName == nameof(ChatListViewModel.SelectedChat))
             {
                 ShowSafetyNumberCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(NoChatSelected));
                 await LoadSelectedChatAsync();
             }
         };
@@ -313,10 +390,38 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             await _localCacheService.SaveAsync("settings", settings);
 
             StatusMessage = $"Synced {chats.Count} chats.";
+
+            // Index all messages in background so FTS5 search works across all chats,
+            // not just ones the user has manually opened.
+            _ = Task.Run(IndexAllChatsForSearchAsync);
         }
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Fetches messages for every chat and runs them through DecryptAsync so
+    /// plaintext_body is written to SQLite and FTS5 picks them up.
+    /// Runs fire-and-forget after RefreshRemoteDataAsync.
+    /// </summary>
+    private async Task IndexAllChatsForSearchAsync()
+    {
+        if (!_sessionService.IsAuthenticated) return;
+
+        foreach (var chat in ChatList.Chats.ToList())
+        {
+            try
+            {
+                var messages = await _apiClient.GetMessagesAsync(chat.Id);
+                foreach (var msg in messages)
+                {
+                    try { await _encryptionService.DecryptAsync(msg); }
+                    catch { /* ignore individual decrypt errors */ }
+                }
+            }
+            catch { /* ignore API errors (e.g. offline) */ }
         }
     }
 
@@ -338,6 +443,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ChatWindow.Title = selectedChat.Title;
         ChatWindow.Subtitle = selectedChat.Type.ToString();
         StatusMessage = $"Loading {selectedChat.Title}...";
+
+        // Reset unread count when opening chat (per D-07)
+        selectedChat.UnreadCount = 0;
+        await _localMessageRepository.ResetUnreadCountAsync(selectedChat.Id);
 
         // Load verification state for this session
         var sessionId = GetCurrentSessionId();
@@ -367,13 +476,24 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         if (_sessionService.IsAuthenticated)
         {
-            var messages = await _apiClient.GetMessagesAsync(selectedChat.Id);
-            await ReplaceMessagesAsync(selectedChat.Id, messages);
-            await _localCacheService.SaveAsync(cacheKey, messages);
-            await _realtimeClient.JoinChatAsync(selectedChat.Id);
+            try
+            {
+                var messages = await _apiClient.GetMessagesAsync(selectedChat.Id);
+                await ReplaceMessagesAsync(selectedChat.Id, messages);
+                await _localCacheService.SaveAsync(cacheKey, messages);
+                await _realtimeClient.JoinChatAsync(selectedChat.Id);
+                StatusMessage = $"{selectedChat.Title} ready.";
+            }
+            catch (System.Net.Http.HttpRequestException)
+            {
+                // Server unreachable — show cached messages and continue
+                StatusMessage = $"{selectedChat.Title} (offline — showing cached messages)";
+            }
         }
-
-        StatusMessage = $"{selectedChat.Title} ready.";
+        else
+        {
+            StatusMessage = $"{selectedChat.Title} ready.";
+        }
     }
 
     private async Task ShowSafetyNumberAsync()
@@ -564,6 +684,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         foreach (var chat in chats)
         {
+            // Persist chat to SQLite so FTS5 search JOIN resolves chat names
+            await _localMessageRepository.UpsertChatAsync(chat);
+
             // Determine peer for 1-to-1 chats (used for E2E encryption recipient)
             var peer = chat.Members?.FirstOrDefault(m => m.UserId != _sessionService.CurrentUserId);
 
@@ -584,6 +707,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 }
             }
 
+            var lastActivity = chat.LastMessage is not null
+                ? TimestampFormatter.FormatTimestamp(chat.LastMessage.CreatedAtUtc)
+                : string.Empty;
+
             ChatList.Chats.Add(new ChatListItemViewModel
             {
                 Id = chat.Id,
@@ -591,7 +718,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 Type = chat.Type,
                 PeerUserId = peer?.UserId ?? Guid.Empty,
                 Subtitle = subtitle,
-                LastActivity = chat.LastMessage?.CreatedAtUtc.LocalDateTime.ToShortTimeString() ?? string.Empty,
+                LastActivity = lastActivity,
                 UnreadCount = chat.UnreadCount
             });
         }
@@ -675,7 +802,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             chatItem.Subtitle = "[Unable to decrypt]";
         }
 
-        chatItem.LastActivity = message.CreatedAtUtc.LocalDateTime.ToShortTimeString();
+        chatItem.LastActivity = TimestampFormatter.FormatTimestamp(message.CreatedAtUtc);
     }
 
     private Task PersistMessagesAsync(Guid chatId)

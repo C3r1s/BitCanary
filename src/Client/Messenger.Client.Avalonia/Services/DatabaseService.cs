@@ -44,6 +44,7 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         await ApplySchemaAsync(conn, cancellationToken);
         await MigrateToV2Async(conn, cancellationToken);
         await MigrateToV3Async(conn, cancellationToken);
+        await MigrateToV4Async(conn, cancellationToken);
 
         return conn;
     }
@@ -78,6 +79,7 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         await ApplySchemaAsync(conn, ct);
         await MigrateToV2Async(conn, ct);
         await MigrateToV3Async(conn, ct);
+        await MigrateToV4Async(conn, ct);
     }
 
     private static async Task EnableWalAsync(SqliteConnection conn, CancellationToken ct)
@@ -234,5 +236,22 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         await using var cmd6 = conn.CreateCommand();
         cmd6.CommandText = "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (3, datetime('now', 'utc'))";
         await cmd6.ExecuteNonQueryAsync(ct);
+    }
+
+    private static async Task MigrateToV4Async(SqliteConnection conn, CancellationToken ct)
+    {
+        await using var checkCmd = conn.CreateCommand();
+        checkCmd.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE version = 4";
+        var count = (long)(await checkCmd.ExecuteScalarAsync(ct))!;
+        if (count > 0) return;
+
+        // Add send-status column to messages table (MessageStatus enum: Sending=0, Delivered=1, Read=2)
+        await using var cmd1 = conn.CreateCommand();
+        cmd1.CommandText = "ALTER TABLE messages ADD COLUMN status INTEGER NOT NULL DEFAULT 0";
+        await cmd1.ExecuteNonQueryAsync(ct);
+
+        await using var cmd2 = conn.CreateCommand();
+        cmd2.CommandText = "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (4, datetime('now', 'utc'))";
+        await cmd2.ExecuteNonQueryAsync(ct);
     }
 }

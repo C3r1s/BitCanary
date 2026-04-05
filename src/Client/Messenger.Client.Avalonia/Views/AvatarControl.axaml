@@ -1,0 +1,19 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:views="using:Messenger.Client.Avalonia.Views"
+             x:Class="Messenger.Client.Avalonia.Views.AvatarControl"
+             x:DataType="views:AvatarControl"
+             Width="36"
+             Height="36">
+  <Border x:Name="AvatarBorder"
+          Width="36"
+          Height="36"
+          CornerRadius="18">
+    <TextBlock x:Name="InitialText"
+               FontSize="16"
+               FontWeight="SemiBold"
+               Foreground="White"
+               HorizontalAlignment="Center"
+               VerticalAlignment="Center" />
+  </Border>
+</UserControl>

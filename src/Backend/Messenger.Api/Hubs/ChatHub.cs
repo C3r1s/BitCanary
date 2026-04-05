@@ -74,7 +74,18 @@ public sealed class ChatHub(
             request.ReplyToMessageId,
             request.MetadataJson);
 
-        return await messageService.SendAsync(command, Context.ConnectionAborted);
+        var message = await messageService.SendAsync(command, Context.ConnectionAborted);
+
+        // Optimistically notify the sender that the message was delivered (broadcast succeeded)
+        await realtimeNotifier.SendMessageDeliveredAsync(message.Id, message.SenderId, Context.ConnectionAborted);
+
+        return message;
+    }
+
+    public async Task ReadMessages(Guid chatId)
+    {
+        var userId = GetUserId();
+        await realtimeNotifier.SendMessagesReadAsync(chatId, userId, Context.ConnectionAborted);
     }
 
     public async Task TypingIndicator(Guid chatId, bool isTyping)

@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Messenger.Shared.Contracts;
 
 namespace Messenger.Client.Avalonia.ViewModels;
 
@@ -14,6 +15,21 @@ public sealed partial class MessageItemViewModel : ViewModelBase
     /// <summary>Set by per-chat find-bar logic to show accent left-border on matching messages.</summary>
     [ObservableProperty]
     private bool _isHighlighted;
+
+    /// <summary>Send status for outgoing messages. Defaults to Sending until updated by SignalR events.</summary>
+    [ObservableProperty]
+    private MessageStatus _status = MessageStatus.Sending;
+
+    /// <summary>Display glyph corresponding to the current send status.</summary>
+    public string StatusGlyph => _status switch
+    {
+        MessageStatus.Sending   => "\u29D6",  // ⧖
+        MessageStatus.Delivered => "\u2713",  // ✓
+        MessageStatus.Read      => "\u2713\u2713", // ✓✓
+        _                       => string.Empty
+    };
+
+    partial void OnStatusChanged(MessageStatus value) => OnPropertyChanged(nameof(StatusGlyph));
 
     // Banner support — optional, only set for system banner messages
     public bool IsSystemBanner { get; init; }

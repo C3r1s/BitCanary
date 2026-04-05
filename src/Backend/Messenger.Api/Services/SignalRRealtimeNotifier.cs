@@ -44,4 +44,22 @@ public sealed class SignalRRealtimeNotifier(
         await hubContext.Clients.Clients(connections)
             .SendAsync(RealtimeEventNames.OtpkSupplyLow, userId, cancellationToken);
     }
+
+    public async Task SendMessageDeliveredAsync(Guid messageId, Guid senderId, CancellationToken cancellationToken)
+    {
+        var connections = connectionMappingService.GetConnections(senderId);
+        if (connections.Count == 0)
+        {
+            return;
+        }
+
+        await hubContext.Clients.Clients(connections)
+            .SendAsync(RealtimeEventNames.MessageDelivered, messageId, cancellationToken);
+    }
+
+    public async Task SendMessagesReadAsync(Guid chatId, Guid readByUserId, CancellationToken cancellationToken)
+    {
+        await hubContext.Clients.Group(chatId.ToString())
+            .SendAsync(RealtimeEventNames.MessageRead, chatId, readByUserId, cancellationToken);
+    }
 }

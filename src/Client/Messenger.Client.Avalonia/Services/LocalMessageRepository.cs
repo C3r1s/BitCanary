@@ -151,6 +151,43 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
     }
 
     /// <inheritdoc/>
+    public async Task UpdateMessageStatusAsync(
+        Guid messageId,
+        MessageStatus status,
+        CancellationToken cancellationToken = default)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            UPDATE messages
+            SET status = @status
+            WHERE client_message_id = @messageId
+            """;
+        cmd.Parameters.AddWithValue("@status", (int)status);
+        cmd.Parameters.AddWithValue("@messageId", messageId.ToString());
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <inheritdoc/>
+    public async Task MarkMessagesReadAsync(
+        Guid chatId,
+        Guid currentUserId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            UPDATE messages
+            SET status = @readStatus
+            WHERE chat_id = @chatId
+              AND sender_id = @senderId
+              AND status < @readStatus
+            """;
+        cmd.Parameters.AddWithValue("@readStatus", (int)MessageStatus.Read);
+        cmd.Parameters.AddWithValue("@chatId", chatId.ToString());
+        cmd.Parameters.AddWithValue("@senderId", currentUserId.ToString());
+        await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<ChatSummaryDto>> GetChatsAsync(
         CancellationToken cancellationToken = default)
     {

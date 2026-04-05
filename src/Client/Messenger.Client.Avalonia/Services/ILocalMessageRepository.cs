@@ -1,3 +1,4 @@
+using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
 
 namespace Messenger.Client.Avalonia.Services;
@@ -26,4 +27,14 @@ public interface ILocalMessageRepository
     /// Called when a chat is opened so the badge disappears (per D-07).
     /// </summary>
     Task ResetUnreadCountAsync(Guid chatId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Updates the send status of a single message (by its client_message_id / server id).
+    /// </summary>
+    Task UpdateMessageStatusAsync(Guid messageId, MessageStatus status, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Marks all outgoing messages in the chat as Read for the current user.
+    /// </summary>
+    Task MarkMessagesReadAsync(Guid chatId, Guid currentUserId, CancellationToken cancellationToken = default);
 }

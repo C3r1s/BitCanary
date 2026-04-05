@@ -20,6 +20,8 @@ public sealed class RealtimeClient : IRealtimeClient
     public event Func<CallSignalDto, Task>? CallSignalReceived;
     public event Func<PresenceChangedDto, Task>? PresenceChanged;
     public event Func<Task>? OtpkSupplyLow;
+    public event Func<Guid, Task>? MessageDelivered;
+    public event Func<Guid, Guid, Task>? MessagesRead;
 
     public async Task ConnectAsync(CancellationToken cancellationToken = default)
     {
@@ -41,6 +43,11 @@ public sealed class RealtimeClient : IRealtimeClient
             ? _hubConnection.InvokeCoreAsync("TypingIndicator", new object?[] { chatId, isTyping }, cancellationToken)
             : Task.CompletedTask;
 
+    public Task SendReadReceiptAsync(Guid chatId, CancellationToken cancellationToken = default) =>
+        _hubConnection.State == HubConnectionState.Connected
+            ? _hubConnection.InvokeCoreAsync("ReadMessages", new object?[] { chatId }, cancellationToken)
+            : Task.CompletedTask;
+
     public ValueTask DisposeAsync() => _hubConnection.DisposeAsync();
 
     private HubConnection CreateConnection(IClientSessionService session)
@@ -58,6 +65,8 @@ public sealed class RealtimeClient : IRealtimeClient
         connection.On<CallSignalDto>(RealtimeEventNames.CallSignalReceived, signal => CallSignalReceived?.Invoke(signal) ?? Task.CompletedTask);
         connection.On<PresenceChangedDto>(RealtimeEventNames.PresenceChanged, signal => PresenceChanged?.Invoke(signal) ?? Task.CompletedTask);
         connection.On(RealtimeEventNames.OtpkSupplyLow, () => OtpkSupplyLow?.Invoke() ?? Task.CompletedTask);
+        connection.On<Guid>(RealtimeEventNames.MessageDelivered, messageId => MessageDelivered?.Invoke(messageId) ?? Task.CompletedTask);
+        connection.On<Guid, Guid>(RealtimeEventNames.MessageRead, (chatId, readByUserId) => MessagesRead?.Invoke(chatId, readByUserId) ?? Task.CompletedTask);
 
         return connection;
     }

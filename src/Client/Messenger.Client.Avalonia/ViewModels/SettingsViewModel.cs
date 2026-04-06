@@ -47,6 +47,9 @@ public sealed partial class SettingsViewModel : ViewModelBase
     /// <summary>Relay from MainWindowViewModel so Settings can trigger safety number view.</summary>
     public IRelayCommand? ShowSafetyNumberCommand { get; set; }
 
+    /// <summary>Relay from MainWindowViewModel so Settings can trigger logout.</summary>
+    public IRelayCommand? LogoutCommand { get; set; }
+
     public IAsyncRelayCommand RegenerateIdentityKeyCommand { get; }
 
     public IRelayCommand ShowRegenerateConfirmCommand { get; }

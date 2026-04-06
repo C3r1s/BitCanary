@@ -79,7 +79,7 @@
               Padding="20,16"
               CornerRadius="24"
               Background="#102633">
-        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12">
+        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="12">
           <StackPanel Spacing="4">
             <TextBlock Text="Messenger" FontSize="24" FontWeight="SemiBold" Foreground="White" />
             <TextBlock Text="{Binding StatusMessage}" Opacity="0.8" Foreground="White" />
@@ -130,11 +130,6 @@
                   Content="Refresh" />
 
           <Button Grid.Column="4"
-                  MinWidth="90"
-                  Command="{Binding LogoutCommand}"
-                  Content="Log out" />
-
-          <Button Grid.Column="5"
                   MinWidth="70"
                   Command="{Binding ExitCommand}"
                   Content="Exit"

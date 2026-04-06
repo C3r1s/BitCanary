@@ -80,6 +80,15 @@
           </Border>
         </StackPanel>
 
+        <!-- Account section -->
+        <StackPanel Spacing="8">
+          <TextBlock Text="Account" FontSize="18" FontWeight="SemiBold" />
+          <Button Content="Log out"
+                  Command="{Binding LogoutCommand}"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Center" />
+        </StackPanel>
+
       </StackPanel>
     </ScrollViewer>
   </Border>

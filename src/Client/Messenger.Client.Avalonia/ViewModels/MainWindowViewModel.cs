@@ -214,6 +214,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         RefreshCommand = new AsyncRelayCommand(RefreshRemoteDataAsync);
         InitializeCommand = new AsyncRelayCommand(InitializeAsync);
         LogoutCommand = new RelayCommand(Logout);
+        Settings.LogoutCommand = LogoutCommand;
         ExitCommand = new RelayCommand(() =>
         {
             if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime)

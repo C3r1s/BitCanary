@@ -22,5 +22,5 @@
   <SolidColorBrush x:Key="SystemControlAcrylicWindowBrush" Color="#050510" />
 
   <!-- Monospace font -->
-  <FontFamily x:Key="ContentControlThemeFontFamily">Consolas, JetBrains Mono, Courier New, monospace</FontFamily>
+  <FontFamily x:Key="ContentControlThemeFontFamily">Fixedsys, Terminal, Lucida Console, Courier New, monospace</FontFamily>
 </ResourceDictionary>

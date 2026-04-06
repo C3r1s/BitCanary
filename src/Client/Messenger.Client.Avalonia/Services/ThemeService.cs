@@ -62,7 +62,7 @@ public sealed class ThemeService : IThemeService
 
         // Override font family to monospace
         Application.Current.Resources["ContentControlThemeFontFamily"] =
-            new FontFamily("Consolas, 'JetBrains Mono', 'Courier New', monospace");
+            new FontFamily("Fixedsys, Terminal, 'Lucida Console', 'Courier New', monospace");
     }
 
     // ─────────────────────────────────────────────────────────────────────────

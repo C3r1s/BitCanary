@@ -63,8 +63,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         new ThemeOption(ThemePreference.Terminal, "Terminal (Hacker)")
     ];
 
-    public IAsyncRelayCommand SaveThemeCommand { get; }
-
     // ── Terminal sub-scheme ───────────────────────────────────────────────────
 
     [ObservableProperty]
@@ -99,7 +97,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
         SelectedThemeOption = ThemeOptions[0];
         SelectedTerminalScheme = TerminalSchemeOptions[0];
 
-        SaveThemeCommand = new AsyncRelayCommand(SaveThemeAsync);
         RegenerateIdentityKeyCommand = new AsyncRelayCommand(RegenerateIdentityKeyAsync);
         ShowRegenerateConfirmCommand = new RelayCommand(() => IsConfirmingRegenerate = true);
         CancelRegenerateCommand = new RelayCommand(() => IsConfirmingRegenerate = false);
@@ -108,6 +105,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     partial void OnSelectedThemeOptionChanged(ThemeOption? value)
     {
         OnPropertyChanged(nameof(IsTerminalThemeSelected));
+        if (value is not null)
+            _ = _changeThemeAsync(value.Value);
     }
 
     partial void OnSelectedTerminalSchemeChanged(TerminalSchemeOption? value)
@@ -140,9 +139,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
             SpkRotationDate = "Last rotated: Unknown";
         }
     }
-
-    private Task SaveThemeAsync() =>
-        _changeThemeAsync(SelectedThemeOption?.Value ?? ThemePreference.System);
 
     private async Task RegenerateIdentityKeyAsync()
     {

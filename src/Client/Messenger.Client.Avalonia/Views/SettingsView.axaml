@@ -35,7 +35,6 @@
             </ComboBox.ItemTemplate>
           </ComboBox>
 
-          <Button Command="{Binding SaveThemeCommand}" Content="Apply Theme" />
         </StackPanel>
 
         <CheckBox Content="Send by Enter" IsChecked="{Binding SendByEnter, Mode=TwoWay}" />

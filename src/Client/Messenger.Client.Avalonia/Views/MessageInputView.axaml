@@ -7,14 +7,31 @@
 
     <!-- Existing input content -->
     <Border Classes="surface-card" Padding="14">
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-        <TextBox AcceptsReturn="True"
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="12">
+        <Button Grid.Column="0"
+                Content="&#128206;"
+                MinWidth="44"
+                MinHeight="44"
+                Background="Transparent"
+                VerticalAlignment="Center"
+                ToolTip.Tip="Attach file" />
+
+        <Button Grid.Column="1"
+                Content="&#128522;"
+                MinWidth="44"
+                MinHeight="44"
+                Background="Transparent"
+                VerticalAlignment="Center"
+                ToolTip.Tip="Emoji" />
+
+        <TextBox Grid.Column="2"
+                 AcceptsReturn="True"
                  MinHeight="64"
                  TextWrapping="Wrap"
                  Watermark="Write an encrypted message..."
                  Text="{Binding Text, Mode=TwoWay}" />
 
-        <Button Grid.Column="1"
+        <Button Grid.Column="3"
                 MinWidth="110"
                 VerticalAlignment="Stretch"
                 Command="{Binding SendCommand}"

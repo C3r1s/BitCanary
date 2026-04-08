@@ -11,4 +11,6 @@ public sealed class UserSettings : Entity
     public bool SendByEnter { get; set; } = true;
     public bool UseCompactMode { get; set; }
     public bool EnableCustomEmoji { get; set; } = true;
+    public bool ShowNotifications { get; set; } = true;
+    public bool ShowSenderName { get; set; } = true;
 }

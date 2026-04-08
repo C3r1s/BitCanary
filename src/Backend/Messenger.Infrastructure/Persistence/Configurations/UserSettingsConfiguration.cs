@@ -17,6 +17,14 @@ public sealed class UserSettingsConfiguration : IEntityTypeConfiguration<UserSet
         builder.Property(x => x.SendByEnter).HasColumnName("send_by_enter").IsRequired();
         builder.Property(x => x.UseCompactMode).HasColumnName("use_compact_mode").IsRequired();
         builder.Property(x => x.EnableCustomEmoji).HasColumnName("enable_custom_emoji").IsRequired();
+        builder.Property(x => x.ShowNotifications)
+            .HasColumnName("show_notifications")
+            .HasDefaultValue(true)
+            .IsRequired();
+        builder.Property(x => x.ShowSenderName)
+            .HasColumnName("show_sender_name")
+            .HasDefaultValue(true)
+            .IsRequired();
 
         builder.HasIndex(x => x.UserId).IsUnique();
     }

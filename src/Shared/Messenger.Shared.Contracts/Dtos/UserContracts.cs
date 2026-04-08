@@ -19,10 +19,14 @@ public sealed record UserSettingsDto(
     ThemePreference ThemePreference,
     bool SendByEnter,
     bool UseCompactMode,
-    bool EnableCustomEmoji);
+    bool EnableCustomEmoji,
+    bool ShowNotifications = true,
+    bool ShowSenderName = true);
 
 public sealed record UpdateSettingsRequest(
     ThemePreference ThemePreference,
     bool SendByEnter,
     bool UseCompactMode,
-    bool EnableCustomEmoji);
+    bool EnableCustomEmoji,
+    bool ShowNotifications = true,
+    bool ShowSenderName = true);

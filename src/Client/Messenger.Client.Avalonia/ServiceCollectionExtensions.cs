@@ -1,3 +1,6 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Messenger.Client.Avalonia.Services;
 using Messenger.Client.Avalonia.Services.Crypto;
 using Messenger.Client.Avalonia.ViewModels;
@@ -58,6 +61,25 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<LocalEnvelopeEncryptionService>();  // retained as legacy decrypt delegate
         services.AddSingleton<KeyPublicationService>();
         services.AddSingleton<IEncryptionService, SignalProtocolEncryptionService>();
+
+        // ── Notification service ───────────────────────────────────────────────────
+        services.AddSingleton<INotificationService>(sp =>
+        {
+            var vm = sp.GetRequiredService<MainWindowViewModel>();
+            return new WindowsNotificationService(
+                isMinimized: () =>
+                {
+                    // Read WindowState from the Avalonia desktop lifetime.
+                    if (Application.Current?.ApplicationLifetime
+                            is IClassicDesktopStyleApplicationLifetime lifetime)
+                    {
+                        return lifetime.MainWindow?.WindowState == WindowState.Minimized;
+                    }
+                    return false;
+                },
+                showNotifications: () => vm.Settings.ShowNotifications,
+                showSenderName:    () => vm.Settings.ShowSenderName);
+        });
 
         // ── Migration ──────────────────────────────────────────────────────
         services.AddSingleton<StartupMigrationService>();

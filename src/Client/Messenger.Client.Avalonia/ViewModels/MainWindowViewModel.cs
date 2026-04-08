@@ -28,6 +28,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly Dictionary<Guid, List<MessageDto>> _messageCache = new();
     private readonly ILocalSearchService _localSearchService;
     private readonly ILocalMessageRepository _localMessageRepository;
+    private readonly INotificationService _notificationService;
+    private Guid? _pendingNavigationChatId;
 
     [ObservableProperty]
     private string _statusMessage = "Loading local cache...";
@@ -157,7 +159,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         IRatchetSessionRepository sessionRepository,
         IIdentityKeyChangeDetector changeDetector,
         ILocalSearchService localSearchService,
-        ILocalMessageRepository localMessageRepository)
+        ILocalMessageRepository localMessageRepository,
+        INotificationService notificationService)
     {
         _apiClient = apiClient;
         _realtimeClient = realtimeClient;
@@ -170,6 +173,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _sessionRepository = sessionRepository;
         _localSearchService = localSearchService;
         _localMessageRepository = localMessageRepository;
+        _notificationService = notificationService;
 
         SafetyNumber = new SafetyNumberViewModel(
             _safetyNumberService,
@@ -251,6 +255,28 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         // v1: navigating to the chat is sufficient; scrolling to specific message is a stretch goal
     }
 
+    /// <summary>
+    /// Navigates to the chat matching <paramref name="chatId"/>.
+    /// If the chat list is not yet populated (cold-start toast activation),
+    /// stores the id as a pending navigation and retries after initialization.
+    /// </summary>
+    public void NavigateToChatAsync(Guid chatId)
+    {
+        if (ChatList.Chats.Count == 0)
+        {
+            // Cold-start guard (RESEARCH.md Pitfall 3): chats not loaded yet.
+            _pendingNavigationChatId = chatId;
+            return;
+        }
+
+        var chatItem = ChatList.Chats.FirstOrDefault(c => c.Id == chatId);
+        if (chatItem is not null)
+        {
+            ChatList.SelectedChat = chatItem;
+            IsShowingSettings = false;
+        }
+    }
+
     private void Logout()
     {
         _sessionService.ClearSession();
@@ -298,6 +324,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         finally
         {
             IsBusy = false;
+        }
+
+        // Flush cold-start pending navigation (RESEARCH.md Pitfall 3)
+        if (_pendingNavigationChatId.HasValue)
+        {
+            var pending = _pendingNavigationChatId.Value;
+            _pendingNavigationChatId = null;
+            NavigateToChatAsync(pending);
         }
     }
 
@@ -626,6 +660,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private async Task HandleIncomingMessageAsync(MessageDto message)
     {
+        ChatListItemViewModel? chatItem = null;
+
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
             await UpdateChatPreviewAsync(message);
@@ -634,7 +670,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             {
                 await AppendMessageToWindowAsync(message);
             }
+
+            chatItem = ChatList.Chats.FirstOrDefault(c => c.Id == message.ChatId);
         });
+
+        // D-04/D-05 (CONTEXT.md): ShowIfMinimized guards internally on WindowState == Minimized.
+        _notificationService.ShowIfMinimized(message.ChatId, chatItem?.Title);
 
         await PersistMessagesAsync(message.ChatId);
     }

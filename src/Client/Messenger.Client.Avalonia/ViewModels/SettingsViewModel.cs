@@ -27,6 +27,14 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _enableCustomEmoji = true;
 
+    // ── Notification section ──────────────────────────────────────────────────
+
+    [ObservableProperty]
+    private bool _showNotifications = true;
+
+    [ObservableProperty]
+    private bool _showSenderName = true;
+
     // ── Encryption section ────────────────────────────────────────────────────
 
     [ObservableProperty]

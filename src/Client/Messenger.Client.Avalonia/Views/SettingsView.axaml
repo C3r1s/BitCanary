@@ -1,95 +1,122 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
-             xmlns:models="using:Messenger.Client.Avalonia.Models"
              x:Class="Messenger.Client.Avalonia.Views.SettingsView"
              x:DataType="vm:SettingsViewModel">
-  <Border Classes="surface-card">
-    <ScrollViewer>
-      <StackPanel Spacing="16" Margin="0,0,8,0">
-        <StackPanel Spacing="4">
-          <TextBlock Text="Settings" FontSize="22" FontWeight="SemiBold" />
-          <TextBlock Text="{Binding ConnectionStatus}" Opacity="0.72" TextWrapping="Wrap" />
-        </StackPanel>
+  <ScrollViewer>
+    <StackPanel Spacing="20" Margin="4">
 
-        <!-- Theme section -->
-        <StackPanel Spacing="8">
-          <TextBlock Text="Theme" FontWeight="SemiBold" />
-          <ComboBox ItemsSource="{Binding ThemeOptions}"
-                    SelectedItem="{Binding SelectedThemeOption, Mode=TwoWay}">
-            <ComboBox.ItemTemplate>
-              <DataTemplate>
-                <TextBlock Text="{Binding Label}" />
-              </DataTemplate>
-            </ComboBox.ItemTemplate>
-          </ComboBox>
-
-          <!-- Terminal sub-scheme picker — only visible when Terminal is selected -->
-          <ComboBox IsVisible="{Binding IsTerminalThemeSelected}"
-                    ItemsSource="{Binding TerminalSchemeOptions}"
-                    SelectedItem="{Binding SelectedTerminalScheme, Mode=TwoWay}">
-            <ComboBox.ItemTemplate>
-              <DataTemplate>
-                <TextBlock Text="{Binding Label}" />
-              </DataTemplate>
-            </ComboBox.ItemTemplate>
-          </ComboBox>
-
-        </StackPanel>
-
-        <CheckBox Content="Send by Enter" IsChecked="{Binding SendByEnter, Mode=TwoWay}" />
-        <CheckBox Content="Compact Mode" IsChecked="{Binding UseCompactMode, Mode=TwoWay}" />
-        <CheckBox Content="Custom Emoji Enabled" IsChecked="{Binding EnableCustomEmoji, Mode=TwoWay}" />
-
-        <!-- Encryption section -->
-        <StackPanel Spacing="8">
-          <TextBlock Text="Encryption" FontSize="18" FontWeight="SemiBold" />
-          <TextBlock Text="Signal Protocol v1" FontSize="16" />
-          <TextBlock Text="{Binding SpkRotationDate}" Opacity="0.72" />
-
-          <Button Content="View Safety Number"
-                  IsEnabled="{Binding CanShowSafetyNumber}"
-                  Command="{Binding ShowSafetyNumberCommand}" />
-
-          <Button Content="Regenerate Identity Key"
-                  Background="#5C1A1A"
-                  Foreground="White"
-                  IsEnabled="{Binding !IsRegenerating}"
-                  Command="{Binding ShowRegenerateConfirmCommand}" />
-
-          <!-- Confirmation overlay (inline) -->
-          <Border IsVisible="{Binding IsConfirmingRegenerate}"
-                  Background="#2A1010"
-                  CornerRadius="6"
-                  Padding="12"
-                  BorderBrush="#5C1A1A"
-                  BorderThickness="1">
-            <StackPanel Spacing="10">
-              <TextBlock TextWrapping="Wrap"
-                         Text="This will invalidate all existing sessions. All contacts will see a safety number change alert. Continue?" />
-              <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Content="Yes, Regenerate"
-                        Background="#5C1A1A"
-                        Foreground="White"
-                        IsEnabled="{Binding !IsRegenerating}"
-                        Command="{Binding RegenerateIdentityKeyCommand}" />
-                <Button Content="Cancel"
-                        Command="{Binding CancelRegenerateCommand}" />
-              </StackPanel>
-            </StackPanel>
-          </Border>
-        </StackPanel>
-
-        <!-- Account section -->
-        <StackPanel Spacing="8">
-          <TextBlock Text="Account" FontSize="18" FontWeight="SemiBold" />
-          <Button Content="Log out"
-                  Command="{Binding LogoutCommand}"
-                  HorizontalAlignment="Stretch"
-                  HorizontalContentAlignment="Center" />
-        </StackPanel>
-
+      <!-- Header -->
+      <StackPanel Spacing="4">
+        <TextBlock Text="[ SETTINGS ]"
+                   FontSize="13" FontWeight="Bold"
+                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+        <TextBlock Text="{Binding ConnectionStatus}"
+                   FontSize="11" Foreground="#505050" TextWrapping="Wrap" />
       </StackPanel>
-    </ScrollViewer>
-  </Border>
+
+      <!-- Theme section -->
+      <StackPanel Spacing="8">
+        <TextBlock Text="theme:" FontSize="11" Foreground="#505050" />
+        <ComboBox ItemsSource="{Binding ThemeOptions}"
+                  SelectedItem="{Binding SelectedThemeOption, Mode=TwoWay}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+        <ComboBox IsVisible="{Binding IsTerminalThemeSelected}"
+                  ItemsSource="{Binding TerminalSchemeOptions}"
+                  SelectedItem="{Binding SelectedTerminalScheme, Mode=TwoWay}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate>
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+
+      <!-- Preferences -->
+      <StackPanel Spacing="6">
+        <TextBlock Text="preferences:" FontSize="11" Foreground="#505050" />
+        <CheckBox Content="send by enter" IsChecked="{Binding SendByEnter, Mode=TwoWay}" />
+        <CheckBox Content="compact mode" IsChecked="{Binding UseCompactMode, Mode=TwoWay}" />
+        <CheckBox Content="custom emoji" IsChecked="{Binding EnableCustomEmoji, Mode=TwoWay}" />
+      </StackPanel>
+
+      <!-- Encryption section -->
+      <StackPanel Spacing="8">
+        <TextBlock Text="encryption:" FontSize="11" Foreground="#505050" />
+        <TextBlock Text="signal protocol v1" FontSize="12" Foreground="#888888" />
+        <TextBlock Text="{Binding SpkRotationDate}" FontSize="11" Foreground="#444444" />
+
+        <Button Content="[ VIEW SAFETY NUMBER ]"
+                IsEnabled="{Binding CanShowSafetyNumber}"
+                Command="{Binding ShowSafetyNumberCommand}"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                Background="Transparent"
+                BorderBrush="#2A2A2A"
+                BorderThickness="1" />
+
+        <Button Content="[ REGENERATE IDENTITY KEY ]"
+                Background="#1C0808"
+                Foreground="#E05050"
+                BorderBrush="#E05050"
+                BorderThickness="1"
+                IsEnabled="{Binding !IsRegenerating}"
+                Command="{Binding ShowRegenerateConfirmCommand}"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center" />
+
+        <!-- Confirm regenerate -->
+        <Border IsVisible="{Binding IsConfirmingRegenerate}"
+                Background="#160808"
+                BorderBrush="#5C1A1A"
+                BorderThickness="1"
+                Padding="12">
+          <StackPanel Spacing="10">
+            <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#C87070"
+                       Text="this will invalidate all existing sessions. all contacts will see a safety number change alert. continue?" />
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="[ YES, REGENERATE ]"
+                      Background="#1C0808" Foreground="#E05050"
+                      BorderBrush="#E05050" BorderThickness="1"
+                      IsEnabled="{Binding !IsRegenerating}"
+                      Command="{Binding RegenerateIdentityKeyCommand}" />
+              <Button Content="[ CANCEL ]"
+                      Background="Transparent"
+                      BorderBrush="#2A2A2A" BorderThickness="1"
+                      Command="{Binding CancelRegenerateCommand}" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- Notifications section -->
+      <StackPanel Spacing="8">
+        <TextBlock Text="notifications:" FontSize="11" Foreground="#505050" />
+        <CheckBox Content="show notifications"
+                  IsChecked="{Binding ShowNotifications, Mode=TwoWay}" />
+        <CheckBox Content="show sender name"
+                  IsChecked="{Binding ShowSenderName, Mode=TwoWay}"
+                  IsEnabled="{Binding ShowNotifications}" />
+      </StackPanel>
+
+      <!-- Account section -->
+      <StackPanel Spacing="8">
+        <TextBlock Text="account:" FontSize="11" Foreground="#505050" />
+        <Button Content="[ LOG OUT ]"
+                Command="{Binding LogoutCommand}"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Center"
+                Background="Transparent"
+                Foreground="#E05050"
+                BorderBrush="#2A2A2A"
+                BorderThickness="1" />
+      </StackPanel>
+
+    </StackPanel>
+  </ScrollViewer>
 </UserControl>

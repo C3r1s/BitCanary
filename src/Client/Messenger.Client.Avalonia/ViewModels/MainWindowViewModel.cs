@@ -644,7 +644,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             themePreference,
             Settings.SendByEnter,
             Settings.UseCompactMode,
-            Settings.EnableCustomEmoji);
+            Settings.EnableCustomEmoji,
+            Settings.ShowNotifications,
+            Settings.ShowSenderName);
 
         if (_sessionService.IsAuthenticated)
         {
@@ -655,7 +657,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             themePreference,
             Settings.SendByEnter,
             Settings.UseCompactMode,
-            Settings.EnableCustomEmoji));
+            Settings.EnableCustomEmoji,
+            Settings.ShowNotifications,
+            Settings.ShowSenderName));
     }
 
     private async Task HandleIncomingMessageAsync(MessageDto message)
@@ -767,6 +771,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         Settings.SendByEnter = settings.SendByEnter;
         Settings.UseCompactMode = settings.UseCompactMode;
         Settings.EnableCustomEmoji = settings.EnableCustomEmoji;
+        Settings.ShowNotifications = settings.ShowNotifications;
+        Settings.ShowSenderName = settings.ShowSenderName;
     }
 
     private async Task ApplyChatSummariesAsync(IReadOnlyCollection<ChatSummaryDto> chats)

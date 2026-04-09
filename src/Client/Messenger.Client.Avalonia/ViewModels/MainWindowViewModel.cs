@@ -639,21 +639,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         var clientMessageId = Guid.NewGuid();
-        var recipientUserId = selectedChat.PeerUserId;
-        var encrypted = await _encryptionService.EncryptTextAsync(plaintext, recipientUserId);
-        var request = new SendMessageRequest(
-            selectedChat.Id,
-            clientMessageId,
-            encrypted.Kind,
-            encrypted.EncryptedPayload,
-            encrypted.EncryptionAlgorithm,
-            encrypted.KeyEnvelope,
-            null,
-            null,
-            encrypted.MetadataJson,
-            ProtocolVersion.SignalProtocol);
 
-        // D-04: Create optimistic VM and display immediately before the POST
+        // D-04: Add optimistic VM to UI immediately — before encryption and POST
         var optimisticVm = new MessageItemViewModel
         {
             Id = Guid.Empty,  // No server ID yet
@@ -677,6 +664,20 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         try
         {
+            var recipientUserId = selectedChat.PeerUserId;
+            var encrypted = await _encryptionService.EncryptTextAsync(plaintext, recipientUserId);
+            var request = new SendMessageRequest(
+                selectedChat.Id,
+                clientMessageId,
+                encrypted.Kind,
+                encrypted.EncryptedPayload,
+                encrypted.EncryptionAlgorithm,
+                encrypted.KeyEnvelope,
+                null,
+                null,
+                encrypted.MetadataJson,
+                ProtocolVersion.SignalProtocol);
+
             var message = await _apiClient.SendMessageAsync(request);
 
             // Remove tracking entry — server confirmed
@@ -686,10 +687,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             await AppendMessageAsync(message);
             await PersistMessagesAsync(selectedChat.Id);
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or TaskCanceledException)
+        catch (Exception ex) when (ex is HttpRequestException
+                                       or OperationCanceledException
+                                       or TaskCanceledException
+                                       or InvalidOperationException)
         {
-            // D-04/D-05: Mark the in-flight VM as failed — no SQLite write (D-08)
+            // D-04/D-05: Mark the in-flight VM as failed — covers network errors and
+            // encryption failures (e.g. recipient has not published keys yet)
             _outgoingVmByClientId.Remove(clientMessageId);
+            System.Diagnostics.Debug.WriteLine($"[SendMessageAsync] Failed: {ex.GetType().Name}: {ex.Message}");
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 optimisticVm.Status = MessageStatus.Failed;
@@ -998,7 +1004,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             Id = message.Id,
             ClientMessageId = Guid.NewGuid(),
-            SenderDisplayName = message.SenderDisplayName,
+            SenderDisplayName = $"<@{message.SenderDisplayName}",
             DisplayText = displayText,
             Timestamp = message.CreatedAtUtc.LocalDateTime.ToShortTimeString(),
             IsOutgoing = message.SenderId == _sessionService.CurrentUserId

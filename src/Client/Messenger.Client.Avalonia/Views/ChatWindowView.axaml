@@ -4,172 +4,214 @@
              xmlns:views="using:Messenger.Client.Avalonia.Views"
              x:Class="Messenger.Client.Avalonia.Views.ChatWindowView"
              x:DataType="vm:ChatWindowViewModel">
-  <Border Classes="surface-card">
-    <Grid RowDefinitions="Auto,Auto,Auto,*" RowSpacing="12">
+  <Grid RowDefinitions="Auto,Auto,Auto,*">
 
-      <!-- Row 0: Find-bar (collapsible) -->
-      <Border Grid.Row="0"
-              IsVisible="{Binding IsFindBarVisible}"
-              Background="#17384C"
-              CornerRadius="8"
-              Padding="8,4"
-              Margin="0,0,0,4">
-        <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
-          <TextBox Text="{Binding FindQuery, Mode=TwoWay}"
-                   Watermark="Find in conversation..."
-                   FontSize="16"
-                   Name="FindQueryBox" />
-          <TextBlock Grid.Column="1"
-                     Text="{Binding FindMatchSummary}"
-                     FontSize="13"
-                     Opacity="0.7"
-                     VerticalAlignment="Center" />
-          <Button Grid.Column="2"
-                  Content="X"
-                  Command="{Binding CloseFindBarCommand}"
-                  ToolTip.Tip="Close find bar"
-                  Background="Transparent"
-                  Padding="8,4" />
-        </Grid>
-      </Border>
+    <!-- Row 0: Find bar (collapsible) -->
+    <Border Grid.Row="0"
+            IsVisible="{Binding IsFindBarVisible}"
+            Background="#0C160C"
+            BorderBrush="#1C3A1C"
+            BorderThickness="0,0,0,1"
+            Padding="12,6">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+        <TextBox Text="{Binding FindQuery, Mode=TwoWay}"
+                 Watermark="find in conversation..."
+                 FontSize="13"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 Name="FindQueryBox" />
+        <TextBlock Grid.Column="1"
+                   Text="{Binding FindMatchSummary}"
+                   FontSize="12" Foreground="#505050"
+                   VerticalAlignment="Center" />
+        <Button Grid.Column="2"
+                Content="[X]"
+                Command="{Binding CloseFindBarCommand}"
+                Background="Transparent" Padding="6,4" />
+      </Grid>
+    </Border>
 
-      <!-- Row 1: Chat header (title, subtitle, safety number) -->
-      <StackPanel Grid.Row="1" Spacing="4">
-        <TextBlock Text="{Binding Title}" FontSize="24" FontWeight="SemiBold" />
-        <TextBlock Text="{Binding Subtitle}" Opacity="0.7" />
+    <!-- Row 1: Chat header -->
+    <Border Grid.Row="1"
+            Background="#0D0D0D"
+            BorderBrush="#1E1E1E"
+            BorderThickness="0,0,0,1"
+            Padding="14,10">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <StackPanel Spacing="3">
+          <TextBlock Text="{Binding Title}"
+                     FontSize="14" FontWeight="Bold"
+                     Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+          <TextBlock Text="{Binding Subtitle}"
+                     FontSize="11" Foreground="#505050" />
+        </StackPanel>
+        <StackPanel Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="8"
+                    VerticalAlignment="Center">
 
-        <!-- Header action row: Safety Number button + verification badge -->
-        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-
-          <!-- Safety Number pill button -->
-          <Button Background="Transparent"
-                  Padding="0"
+          <!-- Safety Number pill -->
+          <Button Background="Transparent" Padding="0"
                   Command="{Binding ShowSafetyNumberCommand}">
-            <Border CornerRadius="999"
-                    Padding="8,4"
-                    BorderBrush="#2C7A7B"
-                    BorderThickness="1">
-              <TextBlock Text="Safety Number"
-                         FontSize="13"
-                         Foreground="#2C7A7B" />
+            <Border Padding="7,3" BorderBrush="#2A2A2A" BorderThickness="1">
+              <TextBlock Text="[safety#]" FontSize="11" Foreground="#505050" />
             </Border>
           </Button>
 
-          <!-- Unverified badge (shown when !IsSessionVerified) -->
-          <Border CornerRadius="999"
-                  Padding="8,4"
-                  Background="#5C1A1A"
+          <!-- Unverified badge -->
+          <Border Padding="7,3"
+                  Background="#1C0808"
+                  BorderBrush="#E05050"
+                  BorderThickness="1"
                   IsVisible="{Binding !IsSessionVerified}">
-            <TextBlock Text="&#9888; Identity unverified"
-                       FontSize="13"
-                       Foreground="White" />
+            <TextBlock Text="! UNVERIFIED" FontSize="11" Foreground="#E05050" />
           </Border>
 
-          <!-- Verified badge (shown when IsSessionVerified) -->
-          <Border CornerRadius="999"
-                  Padding="8,4"
-                  Background="#2C7A7B"
+          <!-- Verified badge -->
+          <Border Padding="7,3"
+                  Background="#003D2A"
+                  BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                  BorderThickness="1"
                   IsVisible="{Binding IsSessionVerified}">
-            <TextBlock Text="Verified"
-                       FontSize="13"
-                       Foreground="White" />
+            <TextBlock Text="✓ VERIFIED"
+                       FontSize="11"
+                       Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
           </Border>
 
         </StackPanel>
-      </StackPanel>
+      </Grid>
+    </Border>
 
-      <!-- Row 2: Typing status -->
-      <TextBlock Grid.Row="2"
-                 Text="{Binding TypingStatus}"
-                 FontStyle="Italic"
-                 Opacity="0.8" />
+    <!-- Row 2: Typing status -->
+    <Border Grid.Row="2"
+            Padding="14,4"
+            IsVisible="{Binding TypingStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+      <TextBlock Text="{Binding TypingStatus}"
+                 FontSize="11" Foreground="#404040"
+                 FontStyle="Italic" />
+    </Border>
 
-      <!-- Row 3: Messages area — empty state or scroll view -->
-      <Panel Grid.Row="3">
-        <!-- Empty state when no messages -->
-        <TextBlock Text="No messages yet. Say hello!"
-                   FontSize="16"
-                   Opacity="0.4"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
-                   IsVisible="{Binding HasNoMessages}" />
+    <!-- Row 3: Messages -->
+    <Panel Grid.Row="3">
 
-        <ScrollViewer Name="MessagesScroll" IsVisible="{Binding !HasNoMessages}">
-          <ItemsControl ItemsSource="{Binding Messages}">
+      <!-- Empty state -->
+      <TextBlock Text="no messages yet. say hello!"
+                 FontSize="12" Foreground="#303030"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center"
+                 IsVisible="{Binding HasNoMessages}" />
+
+      <ScrollViewer Name="MessagesScroll"
+                    IsVisible="{Binding !HasNoMessages}"
+                    Padding="0,4,0,4">
+        <ItemsControl ItemsSource="{Binding Messages}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:MessageItemViewModel">
               <Panel>
-                <!-- Normal message bubble (IsSystemBanner = false) -->
-                <Grid ColumnDefinitions="Auto,*"
-                      IsVisible="{Binding !IsSystemBanner}">
 
-                  <!-- Avatar for incoming messages (left of bubble) -->
-                  <views:AvatarControl Grid.Column="0"
-                                       DisplayName="{Binding SenderDisplayName}"
-                                       IsVisible="{Binding !IsOutgoing}"
-                                       VerticalAlignment="Bottom"
-                                       Margin="0,0,8,0" />
+                <!-- IRC-format message row -->
+                <Border Classes="message-bubble"
+                        Classes.outgoing="{Binding IsOutgoing}"
+                        Classes.highlighted="{Binding IsHighlighted}"
+                        IsVisible="{Binding !IsSystemBanner}"
+                        Padding="14,2">
+                  <Grid ColumnDefinitions="50,100,*,18" ColumnSpacing="6">
 
-                  <!-- Message bubble -->
-                  <Border Grid.Column="1"
-                          Classes="message-bubble"
-                          Classes.outgoing="{Binding IsOutgoing}"
-                          Classes.highlighted="{Binding IsHighlighted}">
-                    <StackPanel Spacing="6">
-                      <TextBlock Text="{Binding SenderDisplayName}" FontWeight="SemiBold" />
-                      <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
-                      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
-                        <TextBlock Text="{Binding Timestamp}" Opacity="0.7" />
-                        <!-- Status glyph: only show on outgoing messages -->
-                        <TextBlock Text="{Binding StatusGlyph}"
-                                   FontSize="13"
-                                   Opacity="0.7"
-                                   IsVisible="{Binding IsOutgoing}" />
-                      </StackPanel>
+                    <!-- [HH:MM] timestamp -->
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding Timestamp}"
+                               FontSize="11" Foreground="#353535"
+                               VerticalAlignment="Top" />
+
+                    <!-- sender name (right-aligned, like IRC) -->
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding SenderDisplayName}"
+                               FontSize="12"
+                               Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                               Classes.sender-outgoing="{Binding IsOutgoing}"
+                               TextTrimming="CharacterEllipsis"
+                               TextAlignment="Right"
+                               VerticalAlignment="Top" />
+
+                    <!-- message text -->
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding DisplayText}"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               VerticalAlignment="Top" />
+
+                    <!-- delivery status glyph + retry button -->
+                    <StackPanel Grid.Column="3"
+                                Orientation="Vertical"
+                                Spacing="4"
+                                IsVisible="{Binding IsOutgoing}"
+                                VerticalAlignment="Top">
+                      <!-- Normal status glyph (not failed) -->
+                      <TextBlock Text="{Binding StatusGlyph}"
+                                 FontSize="11"
+                                 Foreground="#353535"
+                                 IsVisible="{Binding !IsFailedOutgoing}" />
+                      <!-- Failed status glyph (red ⚠) -->
+                      <TextBlock Text="{Binding StatusGlyph}"
+                                 FontSize="11"
+                                 Foreground="#E05050"
+                                 IsVisible="{Binding IsFailedOutgoing}" />
+                      <!-- Retry button — visible only on outgoing failed messages -->
+                      <Button Content="Retry"
+                              FontSize="11"
+                              Foreground="#E05050"
+                              Background="Transparent"
+                              BorderBrush="#E05050"
+                              BorderThickness="1"
+                              Padding="8,4"
+                              MinWidth="44"
+                              MinHeight="20"
+                              VerticalAlignment="Top"
+                              IsVisible="{Binding IsFailedOutgoing}"
+                              Command="{Binding RetryCommand}" />
                     </StackPanel>
-                  </Border>
+                  </Grid>
+                </Border>
 
-                </Grid>
-
-                <!-- System banner (IsSystemBanner = true) -->
-                <Border Background="#5C1A1A"
-                        CornerRadius="12"
-                        Padding="12"
-                        Margin="0,0,0,10"
-                        HorizontalAlignment="Stretch"
+                <!-- System banner -->
+                <Border Background="#1C0808"
+                        BorderBrush="#E05050"
+                        BorderThickness="1"
+                        Padding="14,10"
+                        Margin="14,4"
                         IsVisible="{Binding IsSystemBanner}">
                   <StackPanel Spacing="8">
-                    <TextBlock Text="&#9888; Safety number changed"
-                               FontSize="16"
-                               FontWeight="SemiBold"
-                               Foreground="White" />
+                    <TextBlock Text="! SAFETY NUMBER CHANGED"
+                               FontSize="12" FontWeight="Bold"
+                               Foreground="#E05050" />
                     <TextBlock Text="{Binding BannerText}"
                                TextWrapping="Wrap"
-                               FontSize="16"
-                               Foreground="White" />
+                               FontSize="12" Foreground="#C87070" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
                       <Button Content="{Binding BannerAction1Label}"
                               Command="{Binding BannerAction1Command}"
-                              Background="#2C7A7B"
-                              Foreground="White"
-                              FontSize="16"
-                              FontWeight="SemiBold"
+                              Background="#003D2A"
+                              Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                              BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                              BorderThickness="1" FontSize="12"
                               IsVisible="{Binding BannerAction1Label, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                       <Button Content="{Binding BannerAction2Label}"
                               Command="{Binding BannerAction2Command}"
-                              Background="#5C1A1A"
-                              Foreground="White"
-                              FontSize="16"
+                              Background="#1A0000"
+                              Foreground="#E05050"
+                              BorderBrush="#E05050"
+                              BorderThickness="1" FontSize="12"
                               IsVisible="{Binding BannerAction2Label, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
                     </StackPanel>
                   </StackPanel>
                 </Border>
+
               </Panel>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
-        </ScrollViewer>
-      </Panel>
-    </Grid>
-  </Border>
+      </ScrollViewer>
+    </Panel>
+
+  </Grid>
 </UserControl>

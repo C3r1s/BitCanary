@@ -30,6 +30,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly ILocalMessageRepository _localMessageRepository;
     private readonly INotificationService _notificationService;
     private Guid? _pendingNavigationChatId;
+    private readonly Dictionary<Guid, MessageItemViewModel> _outgoingVmByClientId = new();
 
     [ObservableProperty]
     private string _statusMessage = "Loading local cache...";
@@ -607,11 +608,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        var clientMessageId = Guid.NewGuid();
         var recipientUserId = selectedChat.PeerUserId;
         var encrypted = await _encryptionService.EncryptTextAsync(plaintext, recipientUserId);
         var request = new SendMessageRequest(
             selectedChat.Id,
-            Guid.NewGuid(),
+            clientMessageId,
             encrypted.Kind,
             encrypted.EncryptedPayload,
             encrypted.EncryptionAlgorithm,
@@ -621,9 +623,99 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             encrypted.MetadataJson,
             ProtocolVersion.SignalProtocol);
 
-        var message = await _apiClient.SendMessageAsync(request);
-        await AppendMessageAsync(message);
-        await PersistMessagesAsync(selectedChat.Id);
+        // D-04: Create optimistic VM and display immediately before the POST
+        var optimisticVm = new MessageItemViewModel
+        {
+            Id = Guid.Empty,  // No server ID yet
+            ClientMessageId = clientMessageId,
+            SenderDisplayName = _sessionService.UserName,
+            DisplayText = plaintext,
+            Timestamp = DateTimeOffset.UtcNow.LocalDateTime.ToShortTimeString(),
+            IsOutgoing = true,
+            Status = MessageStatus.Sending
+        };
+        optimisticVm.SetRetryDelegate(RetryMessageAsync);
+        _outgoingVmByClientId[clientMessageId] = optimisticVm;
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (ChatList.SelectedChat?.Id == selectedChat.Id)
+            {
+                ChatWindow.Messages.Add(optimisticVm);
+            }
+        });
+
+        try
+        {
+            var message = await _apiClient.SendMessageAsync(request);
+
+            // Remove tracking entry — server confirmed
+            _outgoingVmByClientId.Remove(clientMessageId);
+
+            // D-08: Only persist server-confirmed messages to SQLite
+            await AppendMessageAsync(message);
+            await PersistMessagesAsync(selectedChat.Id);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or TaskCanceledException)
+        {
+            // D-04/D-05: Mark the in-flight VM as failed — no SQLite write (D-08)
+            _outgoingVmByClientId.Remove(clientMessageId);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                optimisticVm.Status = MessageStatus.Failed;
+            });
+        }
+    }
+
+    /// <summary>
+    /// Re-sends a failed message using the same ClientMessageId.
+    /// Server-side dedup on ClientMessageId makes this safe even if the original
+    /// POST reached the server — the second call is a no-op on the server.
+    /// Per D-06: immediate retry, no queuing.
+    /// </summary>
+    private async Task RetryMessageAsync(Guid clientMessageId)
+    {
+        // Find the failed optimistic VM by ClientMessageId
+        var vm = ChatWindow.Messages
+            .OfType<MessageItemViewModel>()
+            .FirstOrDefault(m => m.ClientMessageId == clientMessageId);
+        if (vm is null) return;
+
+        var selectedChat = ChatList.SelectedChat;
+        if (selectedChat is null) return;
+
+        var plaintext = vm.DisplayText;
+        var recipientUserId = selectedChat.PeerUserId;
+        var encrypted = await _encryptionService.EncryptTextAsync(plaintext, recipientUserId);
+
+        var request = new SendMessageRequest(
+            selectedChat.Id,
+            clientMessageId,  // Same Guid — server deduplicates
+            encrypted.Kind,
+            encrypted.EncryptedPayload,
+            encrypted.EncryptionAlgorithm,
+            encrypted.KeyEnvelope,
+            null,
+            null,
+            encrypted.MetadataJson,
+            ProtocolVersion.SignalProtocol);
+
+        try
+        {
+            var message = await _apiClient.SendMessageAsync(request);
+            // Success — persist server-confirmed message
+            await AppendMessageAsync(message);
+            await PersistMessagesAsync(selectedChat.Id);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or TaskCanceledException)
+        {
+            // Still offline / failed — revert VM status to Failed
+            // (ExecuteRetryAsync set it to Sending before calling here)
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                vm.Status = MessageStatus.Failed;
+            });
+        }
     }
 
     private Task SendTypingAsync(Guid? chatId, bool isTyping)

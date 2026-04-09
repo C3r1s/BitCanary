@@ -196,6 +196,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             if (args.PropertyName == nameof(ChatListViewModel.SelectedChat))
             {
+                _realtimeClient.SetCurrentlySelectedChatId(ChatList.SelectedChat?.Id);
                 ShowSafetyNumberCommand.NotifyCanExecuteChanged();
                 OnPropertyChanged(nameof(NoChatSelected));
                 Settings.CanShowSafetyNumber = ChatList.SelectedChat is not null;
@@ -237,6 +238,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _realtimeClient.OtpkSupplyLow += HandleOtpkSupplyLowAsync;
         _realtimeClient.MessageDelivered += HandleMessageDeliveredAsync;
         _realtimeClient.MessagesRead += HandleMessagesReadAsync;
+        _realtimeClient.ReconnectedAndNeedsRefresh += HandleReconnectedAsync;
+        _realtimeClient.ConnectionStateChanged += state => ConnectionState = state;
 
         changeDetector.IdentityKeyChanged += HandleIdentityKeyChangedAsync;
     }
@@ -370,6 +373,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private async Task HandleOtpkSupplyLowAsync()
     {
         await _keyPublicationService.ReplenishOtpksAsync();
+    }
+
+    private async void HandleReconnectedAsync()
+    {
+        // Called when SignalR reconnects after dropping — refresh data to catch missed messages.
+        // ConnectionState is already set to Online by the ConnectionStateChanged subscription above.
+        await RefreshRemoteDataAsync();
     }
 
     private async Task HandleIdentityKeyChangedAsync(string sessionId, byte[] newIkPublic)

@@ -875,6 +875,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ChatWindow.Messages.Add(new MessageItemViewModel
         {
             Id = message.Id,
+            ClientMessageId = Guid.NewGuid(),
             SenderDisplayName = message.SenderDisplayName,
             DisplayText = displayText,
             Timestamp = message.CreatedAtUtc.LocalDateTime.ToShortTimeString(),

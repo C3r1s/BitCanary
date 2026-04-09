@@ -557,9 +557,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 await _realtimeClient.SendReadReceiptAsync(selectedChat.Id);
                 StatusMessage = $"{selectedChat.Title} ready.";
             }
-            catch (System.Net.Http.HttpRequestException)
+            catch (Exception ex) when (ex is System.Net.Http.HttpRequestException
+                                           or SocketException
+                                           or TaskCanceledException
+                                           or OperationCanceledException)
             {
-                // Server unreachable — show cached messages and continue
+                // Server unreachable or network error — show cached messages and continue (D-11)
                 StatusMessage = $"{selectedChat.Title} (offline — showing cached messages)";
             }
         }

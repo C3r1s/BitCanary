@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Net.Sockets;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
@@ -359,6 +360,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             await _realtimeClient.ConnectAsync();
             IsConnected = true;
+            ConnectionState = Messenger.Shared.Contracts.ConnectionState.Online;
             Settings.ConnectionStatus = $"Connected · {_sessionService.ApiBaseUrl}";
             await RefreshRemoteDataAsync();
         }
@@ -367,6 +369,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             // Token is likely expired or invalid. Force logout.
             Logout();
             StatusMessage = "Your session has expired. Please log in again.";
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                       or SocketException
+                                       or TaskCanceledException
+                                       or OperationCanceledException)
+        {
+            // D-10: Any network failure — fall back to offline mode immediately (no delay).
+            // InitializeAsync already called LoadCachedChatsAsync which populated ChatList.Chats
+            // from SQLite — those items remain visible. No SQLite reads blocked here.
+            // D-11: RefreshRemoteDataAsync failure does not affect SQLite path.
+            ConnectionState = Messenger.Shared.Contracts.ConnectionState.Offline;
+            IsConnected = false;
+            Settings.ConnectionStatus = "Offline — showing cached data";
+            StatusMessage = string.Empty;
+            System.Diagnostics.Debug.WriteLine($"[ConnectAndLoadAsync] Offline fallback: {ex.GetType().Name}: {ex.Message}");
         }
     }
 

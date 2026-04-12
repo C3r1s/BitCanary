@@ -61,6 +61,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isOfflineBannerDismissed;
 
+    [ObservableProperty]
+    private string _currentUsername = string.Empty;
+
+    /// <summary>True when a username is set (user is logged in and username is non-empty).</summary>
+    public bool HasCurrentUsername => !string.IsNullOrEmpty(CurrentUsername);
+
+    partial void OnCurrentUsernameChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasCurrentUsername));
+    }
+
     private DispatcherTimer? _offlineBannerTimer;
 
     /// <summary>True when ConnectionState is Online.</summary>
@@ -289,6 +300,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ChatWindow.Messages.Clear();
         _messageCache.Clear();
         IsLoggedIn = false;
+        CurrentUsername = string.Empty;
         StatusMessage = "Loading local cache...";
         Settings.ConnectionStatus = "Please sign in to connect.";
         LoginVm.UserName = string.Empty;
@@ -301,6 +313,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
             IsLoggedIn = true;
+            CurrentUsername = string.IsNullOrEmpty(_sessionService.UserName)
+                ? string.Empty
+                : $"[ @{_sessionService.UserName} ]";
             StatusMessage = $"Welcome, {auth.DisplayName}!";
             await ConnectAndLoadAsync();
         });
@@ -318,6 +333,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             if (_sessionService.IsAuthenticated)
             {
                 IsLoggedIn = true;
+                CurrentUsername = string.IsNullOrEmpty(_sessionService.UserName)
+                    ? string.Empty
+                    : $"[ @{_sessionService.UserName} ]";
                 await ConnectAndLoadAsync();
             }
             else

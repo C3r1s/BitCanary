@@ -15,6 +15,7 @@ public interface IUserService
     Task<UserProfileDto> UpdateProfileAsync(UpdateProfileRequest request, CancellationToken cancellationToken);
     Task<UserSettingsDto> GetSettingsAsync(CancellationToken cancellationToken);
     Task<UserSettingsDto> UpdateSettingsAsync(UpdateSettingsRequest request, CancellationToken cancellationToken);
+    Task<IReadOnlyCollection<UserProfileDto>> SearchUsersAsync(string query, CancellationToken cancellationToken);
 }
 
 public interface IChatService

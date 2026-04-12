@@ -58,4 +58,23 @@ public sealed class UserService(IAppDbContext dbContext, ICurrentUserContext cur
 
         return settings.ToDto();
     }
+
+    public async Task<IReadOnlyCollection<UserProfileDto>> SearchUsersAsync(
+        string query, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(query) || query.Trim().Length < 2)
+            return Array.Empty<UserProfileDto>();
+
+        var currentUserId = currentUser.RequireUserId();
+        var q = query.Trim().ToLower();
+
+        return await dbContext.Users
+            .AsNoTracking()
+            .Where(u => u.Id != currentUserId &&
+                        (u.UserName.ToLower().Contains(q) ||
+                         u.DisplayName.ToLower().Contains(q)))
+            .Take(20)
+            .Select(u => u.ToDto())
+            .ToArrayAsync(cancellationToken);
+    }
 }

@@ -143,6 +143,29 @@ public sealed class MessengerApiClient(IClientSessionService sessionService) : I
         return (await response.Content.ReadFromJsonAsync<OtpkReplenishResponse>(cancellationToken))!;
     }
 
+    // ── User search & chat creation ─────────────────────────────────────
+
+    public async Task<IReadOnlyCollection<UserProfileDto>> SearchUsersAsync(
+        string query, CancellationToken cancellationToken = default)
+    {
+        if (!sessionService.IsAuthenticated) return Array.Empty<UserProfileDto>();
+        using var req = Authorized(HttpMethod.Get, $"api/users/search?q={Uri.EscapeDataString(query)}");
+        var response = await _http.SendAsync(req, cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync<IReadOnlyCollection<UserProfileDto>>(cancellationToken)
+               ?? Array.Empty<UserProfileDto>();
+    }
+
+    public async Task<ChatSummaryDto> CreateChatAsync(
+        CreateChatRequest request, CancellationToken cancellationToken = default)
+    {
+        using var req = Authorized(HttpMethod.Post, "api/chats");
+        req.Content = JsonContent.Create(request);
+        var response = await _http.SendAsync(req, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return (await response.Content.ReadFromJsonAsync<ChatSummaryDto>(cancellationToken))!;
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     /// <summary>

@@ -11,21 +11,23 @@
         Height="900"
         MinWidth="900"
         MinHeight="640"
-        Title="Messenger">
+        Background="#0A0A0A"
+        Title="BITCANARY">
 
   <Panel>
 
     <!-- ═══════════════════════════════════════════════════════════
-         MIGRATION OVERLAY  (shown during database startup migration)
+         MIGRATION OVERLAY
     ═══════════════════════════════════════════════════════════════ -->
     <Grid IsVisible="{Binding IsMigrating}"
-          Background="#80000000"
+          Background="#C0000000"
           ZIndex="50">
-      <Border CornerRadius="16" Padding="32" MaxWidth="420"
+      <Border CornerRadius="0" Padding="32" MaxWidth="420"
               VerticalAlignment="Center" HorizontalAlignment="Center"
-              Background="{DynamicResource SystemAltHighColor}">
+              Background="#111111" BorderBrush="#1E1E1E" BorderThickness="1">
         <StackPanel Spacing="16" HorizontalAlignment="Center">
-          <TextBlock Text="Migrating local database..." FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+          <TextBlock Text="migrating local database..."
+                     FontSize="13" HorizontalAlignment="Center" Foreground="#C8C8C8" />
           <ProgressBar IsIndeterminate="True" Width="200" />
         </StackPanel>
       </Border>
@@ -35,158 +37,140 @@
          SAFETY NUMBER OVERLAY
     ═══════════════════════════════════════════════════════════════ -->
     <Grid IsVisible="{Binding IsShowingSafetyNumber}"
-          Background="#C0000000"
+          Background="#CC000000"
           ZIndex="100"
           PointerPressed="SafetyNumberScrim_PointerPressed">
-      <Border CornerRadius="20" Padding="32" MaxWidth="480"
+      <Border CornerRadius="0" Padding="28" MaxWidth="480"
               VerticalAlignment="Center" HorizontalAlignment="Center"
-              Background="{DynamicResource SystemAltHighColor}">
+              Background="#111111" BorderBrush="#1E1E1E" BorderThickness="1">
         <views:SafetyNumberView DataContext="{Binding SafetyNumber}" />
       </Border>
     </Grid>
 
     <!-- ═══════════════════════════════════════════════════════════
-         SETTINGS MODAL OVERLAY  (ZIndex=100, same pattern as SafetyNumberView)
+         SETTINGS OVERLAY
     ═══════════════════════════════════════════════════════════════ -->
     <Grid IsVisible="{Binding IsShowingSettings}"
-          Background="#C0000000"
+          Background="#CC000000"
           ZIndex="100"
           PointerPressed="SettingsScrim_PointerPressed">
-      <Border CornerRadius="20" Padding="32" MaxWidth="520"
+      <Border CornerRadius="0" Padding="28" MaxWidth="520"
               VerticalAlignment="Center" HorizontalAlignment="Center"
-              Background="{DynamicResource SystemAltHighColor}">
+              Background="#111111" BorderBrush="#1E1E1E" BorderThickness="1">
         <views:SettingsView DataContext="{Binding Settings}" />
       </Border>
     </Grid>
 
     <!-- ═══════════════════════════════════════════════════════════
-         LOGIN SCREEN  (shown when IsLoggedIn = false)
+         LOGIN SCREEN
     ═══════════════════════════════════════════════════════════════ -->
-    <Grid IsVisible="{Binding !IsLoggedIn}"
-          Background="{DynamicResource SystemAltHighColor}">
+    <Grid IsVisible="{Binding !IsLoggedIn}" Background="#0A0A0A">
       <views:LoginView DataContext="{Binding LoginVm}" />
     </Grid>
 
     <!-- ═══════════════════════════════════════════════════════════
-         MAIN MESSENGER  (shown when IsLoggedIn = true)
+         MAIN MESSENGER
     ═══════════════════════════════════════════════════════════════ -->
-    <Grid RowDefinitions="Auto,Auto,*"
-          IsVisible="{Binding IsLoggedIn}">
+    <Grid RowDefinitions="Auto,Auto,*" IsVisible="{Binding IsLoggedIn}">
 
-      <!-- Row 0: Header bar -->
+      <!-- Row 0: Flat status bar -->
       <Border Grid.Row="0"
-              Margin="20,20,20,14"
-              Padding="20,16"
-              CornerRadius="24"
-              Background="#102633">
-        <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="12">
-          <StackPanel Spacing="4">
-            <TextBlock Text="Messenger" FontSize="24" FontWeight="SemiBold" Foreground="White" />
-            <TextBlock Text="{Binding StatusMessage}" Opacity="0.8" Foreground="White" />
-          </StackPanel>
+              Background="#0D0D0D"
+              BorderBrush="#1E1E1E"
+              BorderThickness="0,0,0,1"
+              Padding="16,9">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="12">
+          <TextBlock Grid.Column="0"
+                     Text="[ BITCANARY ]"
+                     FontSize="13" FontWeight="Bold"
+                     Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                     VerticalAlignment="Center" />
+          <TextBlock Grid.Column="1"
+                     Text="{Binding StatusMessage}"
+                     FontSize="12" Foreground="#484848"
+                     VerticalAlignment="Center" />
+          
+          <!-- Connection status -->
+          <TextBlock Grid.Column="2" Text="● ONLINE" FontSize="12" Foreground="#00CC66"
+                     VerticalAlignment="Center" IsVisible="{Binding IsOnline}" />
+          <TextBlock Grid.Column="2" Text="◌ RECONNECTING" FontSize="12" Foreground="#D9A020"
+                     VerticalAlignment="Center" IsVisible="{Binding IsReconnecting}" />
+          <TextBlock Grid.Column="2" Text="○ OFFLINE" FontSize="12" Foreground="#E05050"
+                     VerticalAlignment="Center" IsVisible="{Binding IsOffline}" />
 
-          <!-- Search icon button -->
-          <Button Grid.Column="1"
-                  MinWidth="44"
-                  MinHeight="44"
-                  Content="&#128269;"
-                  Command="{Binding ToggleGlobalSearchCommand}"
-                  Background="Transparent"
-                  ToolTip.Tip="Search messages" />
-
-          <!-- Connection status pill — Online -->
-          <Border Grid.Column="2"
-                  VerticalAlignment="Center"
-                  Background="#1A3D1A"
-                  CornerRadius="999"
-                  Padding="12,8"
-                  IsVisible="{Binding IsOnline}">
-            <TextBlock Text="Online" Foreground="#00CC33" FontSize="13" />
-          </Border>
-
-          <!-- Connection status pill — Reconnecting -->
-          <Border Grid.Column="2"
-                  VerticalAlignment="Center"
-                  Background="#3D2800"
-                  CornerRadius="999"
-                  Padding="12,8"
-                  IsVisible="{Binding IsReconnecting}">
-            <TextBlock Text="Reconnecting..." Foreground="#FFB300" FontSize="13" />
-          </Border>
-
-          <!-- Connection status pill — Offline -->
-          <Border Grid.Column="2"
-                  VerticalAlignment="Center"
-                  Background="#3D1414"
-                  CornerRadius="999"
-                  Padding="12,8"
-                  IsVisible="{Binding IsOffline}">
-            <TextBlock Text="Offline" Foreground="#FF6B6B" FontSize="13" />
-          </Border>
-
+          <!-- Search -->
           <Button Grid.Column="3"
-                  MinWidth="90"
-                  Command="{Binding RefreshCommand}"
-                  Content="Refresh" />
+                  Content="[SEARCH]"
+                  Command="{Binding ToggleGlobalSearchCommand}"
+                  Background="Transparent" Padding="8,4"
+                  ToolTip.Tip="Search messages (Ctrl+F)" />
 
           <Button Grid.Column="4"
-                  MinWidth="70"
-                  Command="{Binding ExitCommand}"
-                  Content="Exit"
-                  Background="#5C1A1A" />
+                  Content="[ REFRESH ]"
+                  Command="{Binding RefreshCommand}"
+                  Background="Transparent" Padding="8,4"
+                  ToolTip.Tip="Refresh" />
+
+          <TextBlock Grid.Column="5"
+                     Text="{Binding CurrentUsername}"
+                     IsVisible="{Binding HasCurrentUsername}"
+                     FontSize="13" FontWeight="Bold"
+                     Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                     VerticalAlignment="Center" />
         </Grid>
       </Border>
 
-      <!-- Row 1: Offline banner (shown when offline and not dismissed) -->
+      <!-- Row 1: Offline banner -->
       <Border Grid.Row="1"
-              Background="#3D2800"
-              Padding="16,8"
-              Margin="20,0,20,8"
+              Background="#191200"
+              BorderBrush="#282000"
+              BorderThickness="0,0,0,1"
+              Padding="16,6"
               IsVisible="{Binding ShowOfflineBanner}">
         <Grid ColumnDefinitions="*,Auto">
-          <TextBlock Text="Offline &#8212; showing cached messages"
-                     Foreground="#FFB300"
-                     FontSize="13"
+          <TextBlock Text="OFFLINE — showing cached messages"
+                     Foreground="#D9A020" FontSize="12"
                      VerticalAlignment="Center" />
           <Button Grid.Column="1"
-                  Content="X"
+                  Content="[X]"
                   Command="{Binding DismissOfflineBannerCommand}"
-                  Background="Transparent"
-                  Foreground="#FFB300"
-                  Padding="8,4"
-                  ToolTip.Tip="Dismiss" />
+                  Background="Transparent" Foreground="#D9A020"
+                  Padding="8,4" ToolTip.Tip="Dismiss" />
         </Grid>
       </Border>
 
-      <!-- Row 2: 2-column layout: chat list | chat window + input -->
-      <Grid Grid.Row="2"
-            Margin="20,0,20,20"
-            ColumnDefinitions="300,*"
-            ColumnSpacing="16">
+      <!-- Row 2: Two-column layout: sidebar | chat -->
+      <Grid Grid.Row="2" ColumnDefinitions="262,*">
 
-        <views:ChatListView DataContext="{Binding ChatList}" />
+        <!-- Sidebar with right border acting as divider -->
+        <Border Grid.Column="0"
+                BorderBrush="#1E1E1E"
+                BorderThickness="0,0,1,0">
+          <views:ChatListView DataContext="{Binding ChatList}" />
+        </Border>
 
-        <!-- Right panel: empty state OR chat window + input -->
-        <Grid Grid.Column="1" RowDefinitions="*,Auto" RowSpacing="16">
+        <!-- Right panel -->
+        <Grid Grid.Column="1" RowDefinitions="*,Auto">
 
-          <!-- Empty state when no chat is selected -->
-          <Border Classes="surface-card"
-                  IsVisible="{Binding NoChatSelected}">
-            <TextBlock Text="Select a conversation to start messaging"
-                       FontSize="16"
-                       Opacity="0.4"
-                       HorizontalAlignment="Center"
-                       VerticalAlignment="Center" />
+          <!-- Empty state -->
+          <Border Grid.Row="0" Background="Transparent" IsVisible="{Binding NoChatSelected}">
+            <TextBlock Text="select a conversation to start messaging"
+                       FontSize="12" Foreground="#333333"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
 
-          <!-- Chat window (hidden when no chat selected) -->
-          <Panel IsVisible="{Binding !NoChatSelected}">
+          <!-- Chat window -->
+          <Panel Grid.Row="0" IsVisible="{Binding !NoChatSelected}">
             <views:ChatWindowView DataContext="{Binding ChatWindow}" />
           </Panel>
 
-          <Panel Grid.Row="1" IsVisible="{Binding !NoChatSelected}">
+          <!-- Message input with top border separator -->
+          <Border Grid.Row="1"
+                  IsVisible="{Binding !NoChatSelected}"
+                  BorderBrush="#1E1E1E"
+                  BorderThickness="0,1,0,0">
             <views:MessageInputView DataContext="{Binding MessageInput}" />
-          </Panel>
+          </Border>
         </Grid>
 
       </Grid>

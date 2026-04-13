@@ -168,15 +168,142 @@ public sealed class ChatService(IAppDbContext dbContext, ICurrentUserContext cur
         return folder.ToDto();
     }
 
-    public Task<ChatSummaryDto> AddMemberAsync(Guid chatId, Guid userId, CancellationToken cancellationToken)
-        => throw new NotImplementedException();
+    public async Task<ChatSummaryDto> AddMemberAsync(Guid chatId, Guid userId, CancellationToken cancellationToken)
+    {
+        var callerId = currentUser.RequireUserId();
 
-    public Task RemoveMemberAsync(Guid chatId, Guid userId, CancellationToken cancellationToken)
-        => throw new NotImplementedException();
+        var callerMembership = await dbContext.ChatMemberships
+            .SingleOrDefaultAsync(x => x.ChatId == chatId && x.UserId == callerId, cancellationToken);
 
-    public Task UpdateMemberRoleAsync(Guid chatId, Guid userId, ChatRole role, CancellationToken cancellationToken)
-        => throw new NotImplementedException();
+        if (callerMembership is null)
+            throw new AppException("User is not a member of the chat.", HttpStatusCode.Forbidden);
 
-    public Task<ChatSummaryDto> UpdateChatAsync(Guid chatId, UpdateChatRequest request, CancellationToken cancellationToken)
-        => throw new NotImplementedException();
+        if (callerMembership.Role > ChatRole.Admin)
+            throw new AppException("Only Admins and Owners can add members.", HttpStatusCode.Forbidden);
+
+        var alreadyMember = await dbContext.ChatMemberships
+            .AnyAsync(x => x.ChatId == chatId && x.UserId == userId, cancellationToken);
+
+        if (alreadyMember)
+            throw new AppException("User is already a member of the chat.", HttpStatusCode.Conflict);
+
+        dbContext.ChatMemberships.Add(new ChatMembership
+        {
+            ChatId = chatId,
+            UserId = userId,
+            Role = ChatRole.Member
+        });
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var updated = await dbContext.Chats.AsNoTracking()
+            .Include(x => x.Memberships).ThenInclude(x => x.User)
+            .SingleAsync(x => x.Id == chatId, cancellationToken);
+
+        return updated.ToDto(null, 0);
+    }
+
+    public async Task RemoveMemberAsync(Guid chatId, Guid userId, CancellationToken cancellationToken)
+    {
+        var callerId = currentUser.RequireUserId();
+
+        var callerMembership = await dbContext.ChatMemberships
+            .SingleOrDefaultAsync(x => x.ChatId == chatId && x.UserId == callerId, cancellationToken);
+
+        if (callerMembership is null)
+            throw new AppException("User is not a member of the chat.", HttpStatusCode.Forbidden);
+
+        if (userId == callerId)
+        {
+            // Self-remove (leave)
+            if (callerMembership.Role == ChatRole.Owner)
+                throw new AppException("Owner must transfer ownership or delete the group before leaving.", HttpStatusCode.BadRequest);
+
+            dbContext.ChatMemberships.Remove(callerMembership);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        // Removing another user
+        if (callerMembership.Role > ChatRole.Admin)
+            throw new AppException("Only Admins and Owners can remove members.", HttpStatusCode.Forbidden);
+
+        var targetMembership = await dbContext.ChatMemberships
+            .SingleOrDefaultAsync(x => x.ChatId == chatId && x.UserId == userId, cancellationToken);
+
+        if (targetMembership is null)
+            throw new AppException("Target user is not a member of the chat.", HttpStatusCode.NotFound);
+
+        if (targetMembership.Role == ChatRole.Owner)
+            throw new AppException("Cannot remove the group Owner.", HttpStatusCode.Forbidden);
+
+        if (callerMembership.Role == ChatRole.Admin && targetMembership.Role <= ChatRole.Admin)
+            throw new AppException("Admins can only remove Members.", HttpStatusCode.Forbidden);
+
+        dbContext.ChatMemberships.Remove(targetMembership);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task UpdateMemberRoleAsync(Guid chatId, Guid userId, ChatRole role, CancellationToken cancellationToken)
+    {
+        var callerId = currentUser.RequireUserId();
+
+        var callerMembership = await dbContext.ChatMemberships
+            .SingleOrDefaultAsync(x => x.ChatId == chatId && x.UserId == callerId, cancellationToken);
+
+        if (callerMembership is null)
+            throw new AppException("User is not a member of the chat.", HttpStatusCode.Forbidden);
+
+        if (callerMembership.Role != ChatRole.Owner)
+            throw new AppException("Only the Owner can change member roles.", HttpStatusCode.Forbidden);
+
+        if (userId == callerId)
+            throw new AppException("Owner cannot change their own role.", HttpStatusCode.BadRequest);
+
+        if (role == ChatRole.Owner)
+            throw new AppException("Cannot assign Owner role. Use a dedicated ownership transfer operation.", HttpStatusCode.BadRequest);
+
+        var targetMembership = await dbContext.ChatMemberships
+            .SingleOrDefaultAsync(x => x.ChatId == chatId && x.UserId == userId, cancellationToken);
+
+        if (targetMembership is null)
+            throw new AppException("Target user is not a member of the chat.", HttpStatusCode.NotFound);
+
+        targetMembership.Role = role;
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<ChatSummaryDto> UpdateChatAsync(Guid chatId, UpdateChatRequest request, CancellationToken cancellationToken)
+    {
+        var callerId = currentUser.RequireUserId();
+
+        var callerMembership = await dbContext.ChatMemberships
+            .SingleOrDefaultAsync(x => x.ChatId == chatId && x.UserId == callerId, cancellationToken);
+
+        if (callerMembership is null)
+            throw new AppException("User is not a member of the chat.", HttpStatusCode.Forbidden);
+
+        if (callerMembership.Role > ChatRole.Admin)
+            throw new AppException("Only Admins and Owners can update chat metadata.", HttpStatusCode.Forbidden);
+
+        var chat = await dbContext.Chats
+            .SingleOrDefaultAsync(x => x.Id == chatId, cancellationToken);
+
+        if (chat is null)
+            throw new AppException("Chat not found.", HttpStatusCode.NotFound);
+
+        if (!string.IsNullOrWhiteSpace(request.Title))
+            chat.Title = request.Title.Trim();
+
+        if (request.Description is not null)
+            chat.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+
+        var updated = await dbContext.Chats.AsNoTracking()
+            .Include(x => x.Memberships).ThenInclude(x => x.User)
+            .SingleAsync(x => x.Id == chatId, cancellationToken);
+
+        return updated.ToDto(null, 0);
+    }
 }

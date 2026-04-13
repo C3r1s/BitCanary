@@ -5,6 +5,7 @@ using Messenger.Application.Common;
 using Messenger.Domain.Entities;
 using Messenger.Infrastructure.Persistence;
 using Messenger.Shared.Contracts;
+using Messenger.Shared.Contracts.Dtos;
 using Microsoft.EntityFrameworkCore;
 using NSubstitute;
 
@@ -23,7 +24,8 @@ public sealed class GroupMemberServiceTests
     private static ICurrentUserContext CreateCurrentUser(Guid userId)
     {
         var ctx = Substitute.For<ICurrentUserContext>();
-        ctx.RequireUserId().Returns(userId);
+        ctx.IsAuthenticated.Returns(true);
+        ctx.UserId.Returns(userId);
         return ctx;
     }
 

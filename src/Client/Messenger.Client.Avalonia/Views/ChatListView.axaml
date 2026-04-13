@@ -12,11 +12,16 @@
             BorderBrush="#1E1E1E"
             BorderThickness="0,0,0,1"
             Padding="12,10">
-      <Grid ColumnDefinitions="*,Auto">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
         <TextBlock Text="CHANNELS"
                    FontSize="12" FontWeight="Bold"
                    Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
-                   IsVisible="{Binding !IsSearchMode}"
+                   IsVisible="{Binding IsInNormalMode}"
+                   VerticalAlignment="Center" />
+        <TextBlock Text="USER SEARCH"
+                   FontSize="12" FontWeight="Bold"
+                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                   IsVisible="{Binding IsUserSearchMode}"
                    VerticalAlignment="Center" />
         <TextBlock Text="SEARCH"
                    FontSize="12" FontWeight="Bold"
@@ -24,6 +29,14 @@
                    IsVisible="{Binding IsSearchMode}"
                    VerticalAlignment="Center" />
         <Button Grid.Column="1"
+                Content="[ NEW CHAT ]"
+                Command="{Binding ToggleUserSearchCommand}"
+                Background="Transparent"
+                Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                Padding="6,2"
+                FontSize="12"
+                ToolTip.Tip="Find a user" />
+        <Button Grid.Column="2"
                 Content="[SEARCH]"
                 Command="{Binding ToggleSearchCommand}"
                 Background="Transparent"
@@ -34,7 +47,7 @@
 
     <!-- Filter input (chat list mode only) -->
     <Border Grid.Row="1"
-            IsVisible="{Binding !IsSearchMode}"
+            IsVisible="{Binding IsInNormalMode}"
             BorderBrush="#1E1E1E"
             BorderThickness="0,0,0,1"
             Padding="10,6">
@@ -48,7 +61,7 @@
 
     <!-- Chat list -->
     <ListBox Grid.Row="2"
-             IsVisible="{Binding !IsSearchMode}"
+             IsVisible="{Binding IsInNormalMode}"
              ItemsSource="{Binding Chats}"
              SelectedItem="{Binding SelectedChat, Mode=TwoWay}"
              Background="Transparent"
@@ -94,6 +107,11 @@
     <!-- Search results mode -->
     <Panel Grid.Row="2" IsVisible="{Binding IsSearchMode}">
       <views:SearchResultsView DataContext="{Binding Search}" />
+    </Panel>
+
+    <!-- User search mode -->
+    <Panel Grid.Row="2" IsVisible="{Binding IsUserSearchMode}">
+      <views:UserSearchView DataContext="{Binding UserSearch}" />
     </Panel>
 
     <!-- Settings button pinned at bottom -->

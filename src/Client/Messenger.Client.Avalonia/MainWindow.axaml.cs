@@ -34,6 +34,13 @@ public partial class MainWindow : Window
             vm.ChatWindow.CloseFindBarCommand.Execute(null);
             e.Handled = true;
         }
+        else if (e.Key == Key.Escape && vm.ChatList.SelectedChat is not null
+                 && !vm.IsShowingSafetyNumber && !vm.IsShowingSettings
+                 && !vm.ChatList.IsUserSearchMode && !vm.ChatList.IsSearchMode)
+        {
+            vm.CloseActiveChatCommand.Execute(null);
+            e.Handled = true;
+        }
     }
 
     /// <summary>

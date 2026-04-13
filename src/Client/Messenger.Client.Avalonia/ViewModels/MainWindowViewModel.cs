@@ -117,6 +117,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private void CloseActiveChat()
+    {
+        ChatList.SelectedChat = null;
+    }
+
+    [RelayCommand]
     private void DismissOfflineBanner()
     {
         IsOfflineBannerDismissed = true;

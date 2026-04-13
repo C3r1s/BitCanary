@@ -52,6 +52,7 @@ public sealed partial class UserSearchViewModel : ViewModelBase
     {
         _debounceCts?.Cancel();
         _debounceCts?.Dispose();
+        _debounceCts = null;
 
         HasError = false;
         ErrorMessage = string.Empty;
@@ -112,17 +113,26 @@ public sealed partial class UserSearchViewModel : ViewModelBase
     /// <summary>Clears query, results, and all state. Called when user search mode is closed.</summary>
     public void Reset()
     {
+        // Cancel any in-flight debounce immediately (synchronous — safe).
         _debounceCts?.Cancel();
         _debounceCts?.Dispose();
         _debounceCts = null;
 
-        SearchQuery = string.Empty;
-        Results.Clear();
-        HasSearched = false;
-        ShowNoResults = false;
-        IsLoading = false;
-        IsBusy = false;
-        HasError = false;
-        ErrorMessage = string.Empty;
+        // Defer all collection/property mutations to Background priority so they run
+        // AFTER Avalonia's selection model finishes committing the current pointer event.
+        // Calling Results.Clear() synchronously here crashes with ArgumentOutOfRangeException
+        // because the ListBox selection model is still mid-update when Reset() is invoked
+        // from within a SelectUserCommand handler.
+        Dispatcher.UIThread.Post(() =>
+        {
+            Results.Clear();
+            SearchQuery = string.Empty;
+            HasSearched = false;
+            ShowNoResults = false;
+            IsLoading = false;
+            IsBusy = false;
+            HasError = false;
+            ErrorMessage = string.Empty;
+        }, DispatcherPriority.Background);
     }
 }

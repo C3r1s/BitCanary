@@ -2,6 +2,8 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Input;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Messenger.Client.Avalonia.ViewModels;
 
 namespace Messenger.Client.Avalonia.Views;
@@ -50,7 +52,10 @@ public partial class UserSearchView : UserControl
             DataContext is UserSearchViewModel vm)
         {
             vm.SelectUserCommand.Execute(item);
-            _resultsList.SelectedItem = null;
+            // Defer the reset to avoid re-entrant SelectionChanged while the
+            // collection may be in the middle of an update (ArgumentOutOfRangeException).
+            var list = _resultsList;
+            Dispatcher.UIThread.Post(() => list.SelectedItem = null, DispatcherPriority.Background);
         }
     }
 

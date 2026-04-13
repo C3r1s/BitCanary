@@ -19,7 +19,12 @@ public sealed partial class MessageInputViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isBlockedForKeyVerification;
 
+    [ObservableProperty]
+    private string? _pendingAttachmentName;
+
     public IAsyncRelayCommand SendCommand { get; }
+    public IRelayCommand<string> InsertEmojiCommand { get; }
+    public IRelayCommand ClearAttachmentCommand { get; }
 
     public MessageInputViewModel(
         Func<string, Task> sendAsync,
@@ -32,6 +37,22 @@ public sealed partial class MessageInputViewModel : ViewModelBase
         _getCurrentChatId = getCurrentChatId;
         _getIsBlockedForKeyVerification = getIsBlockedForKeyVerification;
         SendCommand = new AsyncRelayCommand(SendAsync, CanSend);
+        InsertEmojiCommand = new RelayCommand<string>(emoji =>
+        {
+            if (emoji is not null) Text += emoji;
+        });
+        ClearAttachmentCommand = new RelayCommand(() =>
+        {
+            PendingAttachmentName = null;
+            SendCommand.NotifyCanExecuteChanged();
+        });
+    }
+
+    /// <summary>Called from code-behind after the user picks a file.</summary>
+    public void AttachFile(string fileName)
+    {
+        PendingAttachmentName = fileName;
+        SendCommand.NotifyCanExecuteChanged();
     }
 
     partial void OnTextChanged(string value)
@@ -46,15 +67,21 @@ public sealed partial class MessageInputViewModel : ViewModelBase
         SendCommand.NotifyCanExecuteChanged();
     }
 
-    private bool CanSend() => !string.IsNullOrWhiteSpace(Text) && !IsSending && !_getIsBlockedForKeyVerification();
+    private bool CanSend() =>
+        (!string.IsNullOrWhiteSpace(Text) || PendingAttachmentName is not null)
+        && !IsSending
+        && !_getIsBlockedForKeyVerification();
 
     private async Task SendAsync()
     {
         var text = Text.Trim();
+        if (PendingAttachmentName is not null)
+            text = string.IsNullOrWhiteSpace(text)
+                ? $"[File: {PendingAttachmentName}]"
+                : $"{text}\n[File: {PendingAttachmentName}]";
+
         if (string.IsNullOrWhiteSpace(text))
-        {
             return;
-        }
 
         IsSending = true;
         SendCommand.NotifyCanExecuteChanged();
@@ -63,6 +90,7 @@ public sealed partial class MessageInputViewModel : ViewModelBase
         {
             await _sendAsync(text);
             Text = string.Empty;
+            PendingAttachmentName = null;
         }
         finally
         {

@@ -3,16 +3,16 @@
              xmlns:views="using:Messenger.Client.Avalonia.Views"
              x:Class="Messenger.Client.Avalonia.Views.AvatarControl"
              x:DataType="views:AvatarControl"
-             Width="36"
-             Height="36">
+             Width="28"
+             Height="28">
   <Border x:Name="AvatarBorder"
-          Width="36"
-          Height="36"
-          CornerRadius="18">
+          Width="28"
+          Height="28"
+          CornerRadius="0"
+          BorderThickness="1">
     <TextBlock x:Name="InitialText"
-               FontSize="16"
-               FontWeight="SemiBold"
-               Foreground="White"
+               FontSize="11"
+               FontWeight="Bold"
                HorizontalAlignment="Center"
                VerticalAlignment="Center" />
   </Border>

@@ -58,7 +58,7 @@ public partial class App : Application
 
             desktop.MainWindow = mainWindow;
 
-            RunMigration(mainWindowViewModel);
+            // RunMigration(mainWindowViewModel); // Commented out for debugging
         }
 
         base.OnFrameworkInitializationCompleted();

@@ -3,66 +3,62 @@
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
              x:Class="Messenger.Client.Avalonia.Views.SafetyNumberView"
              x:DataType="vm:SafetyNumberViewModel">
-  <StackPanel Spacing="24">
+  <StackPanel Spacing="16">
 
-    <!-- Row 1: Title + Close button -->
+    <!-- Title + close -->
     <Grid ColumnDefinitions="*,Auto">
-      <TextBlock Text="Safety Number"
-                 FontSize="24"
-                 FontWeight="SemiBold"
+      <TextBlock Text="SAFETY NUMBER"
+                 FontSize="13" FontWeight="Bold"
+                 Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                  VerticalAlignment="Center" />
       <Button Grid.Column="1"
-              Content="X"
+              Content="[X]"
               Command="{Binding CloseCommand}"
-              Background="Transparent"
-              Padding="8,4"
+              Background="Transparent" Padding="8,4"
               VerticalAlignment="Center" />
     </Grid>
 
-    <!-- Row 2: Peer display name -->
+    <!-- Peer name -->
     <TextBlock Text="{Binding PeerDisplayName}"
-               FontSize="20"
-               FontWeight="SemiBold"
-               Opacity="0.8" />
+               FontSize="13" Foreground="#888888" />
 
-    <!-- Row 3: Loading spinner -->
-    <ProgressBar IsIndeterminate="True"
-                 Width="200"
-                 IsVisible="{Binding IsLoading}" />
+    <!-- Loading -->
+    <ProgressBar IsIndeterminate="True" Width="200" IsVisible="{Binding IsLoading}" />
 
-    <!-- Row 4: Safety number digits -->
+    <!-- Safety number digits -->
     <TextBlock Text="{Binding SafetyNumber}"
-               FontSize="24"
-               FontWeight="SemiBold"
+               FontSize="18" FontWeight="Bold"
                FontFamily="Cascadia Mono, Consolas, Courier New"
+               Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                TextWrapping="Wrap"
                TextAlignment="Center"
                IsVisible="{Binding !IsLoading}" />
 
-    <!-- Row 5: Instructional text -->
-    <TextBlock FontSize="16"
-               TextWrapping="Wrap"
-               Opacity="0.85">
-      <Run Text="Compare these numbers with " />
-      <Run Text="{Binding PeerDisplayName}" />
-      <Run Text=" over a phone call or in person. If the numbers match, this conversation is secure." />
-    </TextBlock>
+    <!-- Instructions -->
+    <Border BorderBrush="#1E1E1E" BorderThickness="0,1,0,0" Padding="0,12,0,0">
+      <TextBlock FontSize="12" TextWrapping="Wrap" Foreground="#888888">
+        <Run Text="compare these numbers with " />
+        <Run Text="{Binding PeerDisplayName}" FontWeight="Bold" Foreground="#C8C8C8" />
+        <Run Text=" over a call or in person. if they match, this conversation is secure." />
+      </TextBlock>
+    </Border>
 
-    <!-- Row 6: Verification timestamp (shown when verified) -->
+    <!-- Verified timestamp -->
     <StackPanel IsVisible="{Binding IsVerified}">
       <TextBlock Text="{Binding VerifiedOnText}"
-                 Foreground="#2C7A7B"
-                 FontSize="13" />
+                 Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                 FontSize="12" />
     </StackPanel>
 
-    <!-- Row 7: Mark as Verified button -->
+    <!-- Verify button -->
     <Button Content="{Binding VerifyButtonText}"
             HorizontalAlignment="Stretch"
             HorizontalContentAlignment="Center"
-            Background="#2C7A7B"
-            Foreground="White"
-            FontSize="16"
-            FontWeight="SemiBold"
+            Background="#003D2A"
+            Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+            BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+            BorderThickness="1"
+            FontSize="13"
             Command="{Binding MarkAsVerifiedCommand}"
             IsEnabled="{Binding !IsVerified}" />
 

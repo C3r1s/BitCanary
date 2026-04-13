@@ -8,6 +8,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Messenger.Shared.Contracts.Dtos;
 
 namespace Messenger.Client.Avalonia;
 
@@ -65,20 +66,30 @@ public static class ServiceCollectionExtensions
         // ── Notification service ───────────────────────────────────────────────────
         services.AddSingleton<INotificationService>(sp =>
         {
-            var vm = sp.GetRequiredService<MainWindowViewModel>();
+            var session = sp.GetRequiredService<IClientSessionService>();
+            var cache = sp.GetRequiredService<ILocalCacheService>();
+
             return new WindowsNotificationService(
                 isMinimized: () =>
                 {
-                    // Read WindowState from the Avalonia desktop lifetime.
-                    if (Application.Current?.ApplicationLifetime
-                            is IClassicDesktopStyleApplicationLifetime lifetime)
+                    if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
                     {
-                        return lifetime.MainWindow?.WindowState == WindowState.Minimized;
+                        return desktop.MainWindow?.WindowState == WindowState.Minimized;
                     }
                     return false;
                 },
-                showNotifications: () => vm.Settings.ShowNotifications,
-                showSenderName:    () => vm.Settings.ShowSenderName);
+                showNotifications: () =>
+                {
+                    if (!session.IsAuthenticated) return true; // Default to on if not logged in
+                    var settings = cache.LoadAsync<UserSettingsDto>("settings").GetAwaiter().GetResult();
+                    return settings?.ShowNotifications ?? true;
+                },
+                showSenderName: () =>
+                {
+                    if (!session.IsAuthenticated) return true;
+                    var settings = cache.LoadAsync<UserSettingsDto>("settings").GetAwaiter().GetResult();
+                    return settings?.ShowSenderName ?? true;
+                });
         });
 
         // ── Migration ──────────────────────────────────────────────────────

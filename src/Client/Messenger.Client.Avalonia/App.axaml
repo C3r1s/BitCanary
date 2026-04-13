@@ -1,35 +1,63 @@
 <Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              x:Class="Messenger.Client.Avalonia.App"
-             RequestedThemeVariant="Default">
+             RequestedThemeVariant="Dark">
+  <Application.Resources>
+    <!-- Bitchat terminal dark palette — overridable by terminal themes -->
+    <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="#0A0A0A" />
+    <SolidColorBrush x:Key="SystemControlAcrylicWindowBrush" Color="#111111" />
+    <Color x:Key="SystemAltHighColor">#111111</Color>
+    <Color x:Key="SystemAltMediumColor">#161616</Color>
+    <SolidColorBrush x:Key="SystemControlBackgroundAltHighBrush" Color="#111111" />
+    <SolidColorBrush x:Key="SystemControlBackgroundChromeMediumBrush" Color="#161616" />
+    <SolidColorBrush x:Key="SystemControlForegroundBaseHighBrush" Color="#C8C8C8" />
+    <SolidColorBrush x:Key="SystemControlHighlightAccentBrush" Color="#00D9A0" />
+    <SolidColorBrush x:Key="SystemControlForegroundBaseMediumBrush" Color="#00D9A0" />
+    <SolidColorBrush x:Key="SystemControlForegroundBaseLowBrush" Color="#1E1E1E" />
+    <FontFamily x:Key="ContentControlThemeFontFamily">Consolas, JetBrains Mono, Courier New, monospace</FontFamily>
+  </Application.Resources>
   <Application.Styles>
     <FluentTheme />
 
+    <!-- Remove ListBox item padding -->
+    <Style Selector="ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Margin" Value="0" />
+    </Style>
+
+    <!-- Flat surfaces (no rounded cards) -->
     <Style Selector="Border.surface-card">
-      <Setter Property="CornerRadius" Value="20" />
-      <Setter Property="Padding" Value="18" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Padding" Value="0" />
       <Setter Property="Background" Value="{DynamicResource SystemControlAcrylicWindowBrush}" />
       <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}" />
       <Setter Property="BorderThickness" Value="1" />
     </Style>
 
+    <!-- IRC-style message rows — no bubbles -->
     <Style Selector="Border.message-bubble">
-      <Setter Property="CornerRadius" Value="18" />
-      <Setter Property="Padding" Value="12" />
-      <Setter Property="Margin" Value="0,0,0,10" />
-      <Setter Property="MaxWidth" Value="520" />
-      <Setter Property="HorizontalAlignment" Value="Left" />
-      <Setter Property="Background" Value="{DynamicResource SystemAltMediumColor}" />
+      <Setter Property="CornerRadius" Value="0" />
+      <Setter Property="Padding" Value="0,2" />
+      <Setter Property="Margin" Value="0,0,0,1" />
+      <Setter Property="MaxWidth" Value="10000" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="Background" Value="Transparent" />
     </Style>
 
     <Style Selector="Border.message-bubble.outgoing">
-      <Setter Property="HorizontalAlignment" Value="Right" />
-      <Setter Property="Background" Value="#23534B" />
+      <Setter Property="HorizontalAlignment" Value="Stretch" />
+      <Setter Property="Background" Value="Transparent" />
     </Style>
 
     <Style Selector="Border.message-bubble.highlighted">
-      <Setter Property="BorderBrush" Value="#2C7A7B" />
-      <Setter Property="BorderThickness" Value="3,0,0,0" />
+      <Setter Property="BorderBrush" Value="{DynamicResource SystemControlHighlightAccentBrush}" />
+      <Setter Property="BorderThickness" Value="2,0,0,0" />
+      <Setter Property="Padding" Value="6,2,0,2" />
+    </Style>
+
+    <!-- Outgoing sender name: muted gray -->
+    <Style Selector="TextBlock.sender-outgoing">
+      <Setter Property="Foreground" Value="#707070" />
     </Style>
   </Application.Styles>
 </Application>

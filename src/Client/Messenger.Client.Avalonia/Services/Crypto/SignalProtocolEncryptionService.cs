@@ -116,6 +116,7 @@ public sealed class SignalProtocolEncryptionService(
             // Persist plaintext for FTS5 search index (legacy path)
             if (!legacyPlaintext.StartsWith("[Unable to decrypt]", StringComparison.Ordinal))
             {
+                await localMessageRepository.SaveMessageAsync(message, (int)message.ProtocolVersion, cancellationToken);
                 await localMessageRepository.UpdatePlaintextBodyAsync(message.Id, legacyPlaintext, cancellationToken);
             }
             return legacyPlaintext;
@@ -210,6 +211,7 @@ public sealed class SignalProtocolEncryptionService(
             var plaintext = Encoding.UTF8.GetString(plaintextBytes);
 
             // Persist plaintext for FTS5 search index (trigger updates messages_fts automatically)
+            await localMessageRepository.SaveMessageAsync(message, (int)message.ProtocolVersion, cancellationToken);
             await localMessageRepository.UpdatePlaintextBodyAsync(message.Id, plaintext, cancellationToken);
 
             return plaintext;

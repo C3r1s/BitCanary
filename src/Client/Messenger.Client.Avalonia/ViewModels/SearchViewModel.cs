@@ -54,6 +54,7 @@ public sealed partial class SearchViewModel : ViewModelBase
     {
         _debounceCts?.Cancel();
         _debounceCts?.Dispose();
+        _debounceCts = null;
 
         if (string.IsNullOrWhiteSpace(value))
         {

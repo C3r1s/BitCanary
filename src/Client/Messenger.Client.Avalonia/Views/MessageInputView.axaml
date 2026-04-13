@@ -5,47 +5,135 @@
              x:DataType="vm:MessageInputViewModel">
   <Grid>
 
-    <!-- Existing input content -->
-    <Border Classes="surface-card" Padding="14">
-      <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="12">
-        <Button Grid.Column="0"
-                Content="&#128206;"
-                MinWidth="44"
-                MinHeight="44"
-                Background="Transparent"
-                VerticalAlignment="Center"
-                ToolTip.Tip="Attach file" />
+    <Border Padding="10,8">
+      <Grid RowDefinitions="Auto,*">
 
-        <Button Grid.Column="1"
-                Content="&#128522;"
-                MinWidth="44"
-                MinHeight="44"
-                Background="Transparent"
-                VerticalAlignment="Center"
-                ToolTip.Tip="Emoji" />
+        <!-- Attachment chip -->
+        <Border Grid.Row="0"
+                IsVisible="{Binding PendingAttachmentName, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Background="#161616"
+                BorderBrush="#2A2A2A"
+                BorderThickness="1"
+                Padding="8,4"
+                Margin="0,0,0,6"
+                HorizontalAlignment="Left">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="[+]" Foreground="#505050" FontSize="11" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding PendingAttachmentName}"
+                       FontSize="11" Foreground="#888888" VerticalAlignment="Center" />
+            <Button Content="x"
+                    Command="{Binding ClearAttachmentCommand}"
+                    Background="Transparent" Padding="2"
+                    MinWidth="0" MinHeight="0"
+                    FontSize="11" Foreground="#505050"
+                    VerticalAlignment="Center"
+                    ToolTip.Tip="Remove attachment" />
+          </StackPanel>
+        </Border>
 
-        <TextBox Grid.Column="2"
-                 AcceptsReturn="True"
-                 MinHeight="64"
-                 TextWrapping="Wrap"
-                 Watermark="Write an encrypted message..."
-                 Text="{Binding Text, Mode=TwoWay}" />
+        <!-- Input row -->
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
 
-        <Button Grid.Column="3"
-                MinWidth="110"
-                VerticalAlignment="Stretch"
-                Command="{Binding SendCommand}"
-                Content="Send" />
+          <!-- Attach button -->
+          <Button Grid.Column="0"
+                  Content="[+]"
+                  MinHeight="36"
+                  Background="Transparent"
+                  Foreground="#505050"
+                  BorderThickness="0"
+                  VerticalAlignment="Center"
+                  ToolTip.Tip="Attach file"
+                  Click="OnAttachClicked" />
+
+          <!-- Emoji button -->
+          <Button Grid.Column="1"
+                  Content="[:)]"
+                  MinHeight="36"
+                  Background="Transparent"
+                  Foreground="#505050"
+                  BorderThickness="0"
+                  VerticalAlignment="Center"
+                  ToolTip.Tip="Emoji">
+            <Button.Flyout>
+              <Flyout Placement="TopEdgeAlignedLeft">
+                <Border Padding="8" Background="#111111" BorderBrush="#1E1E1E" BorderThickness="1">
+                  <WrapPanel Width="260">
+                    <Button Content="😀" Command="{Binding InsertEmojiCommand}" CommandParameter="😀" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="😂" Command="{Binding InsertEmojiCommand}" CommandParameter="😂" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="😊" Command="{Binding InsertEmojiCommand}" CommandParameter="😊" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="😍" Command="{Binding InsertEmojiCommand}" CommandParameter="😍" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="🥰" Command="{Binding InsertEmojiCommand}" CommandParameter="🥰" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="😎" Command="{Binding InsertEmojiCommand}" CommandParameter="😎" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="🤔" Command="{Binding InsertEmojiCommand}" CommandParameter="🤔" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="😅" Command="{Binding InsertEmojiCommand}" CommandParameter="😅" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="😭" Command="{Binding InsertEmojiCommand}" CommandParameter="😭" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="😤" Command="{Binding InsertEmojiCommand}" CommandParameter="😤" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="😮" Command="{Binding InsertEmojiCommand}" CommandParameter="😮" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="🥲" Command="{Binding InsertEmojiCommand}" CommandParameter="🥲" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="😴" Command="{Binding InsertEmojiCommand}" CommandParameter="😴" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="🤯" Command="{Binding InsertEmojiCommand}" CommandParameter="🤯" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="👍" Command="{Binding InsertEmojiCommand}" CommandParameter="👍" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="👎" Command="{Binding InsertEmojiCommand}" CommandParameter="👎" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="❤️" Command="{Binding InsertEmojiCommand}" CommandParameter="❤️" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="🙏" Command="{Binding InsertEmojiCommand}" CommandParameter="🙏" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="👏" Command="{Binding InsertEmojiCommand}" CommandParameter="👏" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="✌️" Command="{Binding InsertEmojiCommand}" CommandParameter="✌️" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="🤝" Command="{Binding InsertEmojiCommand}" CommandParameter="🤝" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="💪" Command="{Binding InsertEmojiCommand}" CommandParameter="💪" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="🔥" Command="{Binding InsertEmojiCommand}" CommandParameter="🔥" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="✅" Command="{Binding InsertEmojiCommand}" CommandParameter="✅" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="❌" Command="{Binding InsertEmojiCommand}" CommandParameter="❌" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="⭐" Command="{Binding InsertEmojiCommand}" CommandParameter="⭐" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="🎉" Command="{Binding InsertEmojiCommand}" CommandParameter="🎉" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="💯" Command="{Binding InsertEmojiCommand}" CommandParameter="💯" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="🚀" Command="{Binding InsertEmojiCommand}" CommandParameter="🚀" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="💡" Command="{Binding InsertEmojiCommand}" CommandParameter="💡" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="⚠️" Command="{Binding InsertEmojiCommand}" CommandParameter="⚠️" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                    <Button Content="🎊" Command="{Binding InsertEmojiCommand}" CommandParameter="🎊" Background="Transparent" MinWidth="36" MinHeight="36" Padding="4" FontSize="18" />
+                  </WrapPanel>
+                </Border>
+              </Flyout>
+            </Button.Flyout>
+          </Button>
+
+          <!-- Text input with > prompt prefix -->
+          <Grid Grid.Column="2" ColumnDefinitions="Auto,*">
+            <TextBlock Grid.Column="0"
+                       Text=">"
+                       Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                       FontSize="14"
+                       VerticalAlignment="Center"
+                       Margin="0,0,6,0" />
+            <TextBox Grid.Column="1"
+                     AcceptsReturn="True"
+                     MinHeight="36"
+                     TextWrapping="Wrap"
+                     Watermark="write an encrypted message..."
+                     Text="{Binding Text, Mode=TwoWay}"
+                     Background="Transparent"
+                     BorderThickness="0" />
+          </Grid>
+
+          <!-- Send button -->
+          <Button Grid.Column="3"
+                  MinWidth="80"
+                  VerticalAlignment="Stretch"
+                  Command="{Binding SendCommand}"
+                  Content="[SEND]"
+                  Background="#003D2A"
+                  Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                  BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+                  BorderThickness="1" />
+        </Grid>
+
       </Grid>
     </Border>
 
-    <!-- Block overlay — shown when session is not verified -->
-    <Border Background="#C8000000"
-            CornerRadius="12"
+    <!-- Block overlay — identity not verified -->
+    <Border Background="#CC000000"
             IsVisible="{Binding IsBlockedForKeyVerification}">
-      <TextBlock Text="Verify identity to continue"
-                 FontSize="16"
-                 Foreground="White"
+      <TextBlock Text="verify identity to continue"
+                 FontSize="13" Foreground="#E05050"
                  HorizontalAlignment="Center"
                  VerticalAlignment="Center" />
     </Border>

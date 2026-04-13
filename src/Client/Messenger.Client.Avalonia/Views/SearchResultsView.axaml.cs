@@ -1,6 +1,6 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
+using Avalonia.Interactivity;
 using Avalonia.Input;
 using Messenger.Client.Avalonia.ViewModels;
 
@@ -14,24 +14,20 @@ public partial class SearchResultsView : UserControl
     public SearchResultsView()
     {
         InitializeComponent();
-        DataContextChanged += OnDataContextChanged;
     }
 
-    private void OnDataContextChanged(object? sender, EventArgs e)
+    protected override void OnLoaded(RoutedEventArgs e)
     {
-        // nothing extra needed; bindings handle the rest
-    }
-
-    protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
-    {
-        base.OnApplyTemplate(e);
+        base.OnLoaded(e);
         _searchQueryBox = this.FindControl<TextBox>("SearchQueryBox");
-        _resultsList = this.FindControl<ListBox>("ResultsList");
+        _resultsList    = this.FindControl<ListBox>("ResultsList");
 
         if (_resultsList is not null)
-        {
             _resultsList.SelectionChanged += OnResultsListSelectionChanged;
-        }
+
+        // If already visible on first load, focus immediately
+        if (IsVisible)
+            _searchQueryBox?.Focus();
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)

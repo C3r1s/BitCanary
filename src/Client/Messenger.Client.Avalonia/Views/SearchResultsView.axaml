@@ -3,74 +3,83 @@
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
              x:Class="Messenger.Client.Avalonia.Views.SearchResultsView"
              x:DataType="vm:SearchViewModel">
-  <Grid RowDefinitions="Auto,Auto,*" RowSpacing="16">
+  <Grid RowDefinitions="Auto,Auto,*">
 
-    <!-- Title -->
-    <TextBlock Text="Search Results" FontSize="22" FontWeight="SemiBold" />
+    <!-- Header -->
+    <Border Grid.Row="0"
+            BorderBrush="#1E1E1E"
+            BorderThickness="0,0,0,1"
+            Padding="12,8">
+      <TextBlock Text="SEARCH"
+                 FontSize="12" FontWeight="Bold"
+                 Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+    </Border>
 
     <!-- Search input -->
-    <TextBox Grid.Row="1"
-             Watermark="Search all conversations..."
-             Text="{Binding SearchQuery, Mode=TwoWay}"
-             Name="SearchQueryBox" />
+    <Border Grid.Row="1"
+            BorderBrush="#1E1E1E"
+            BorderThickness="0,0,0,1"
+            Padding="10,6">
+      <TextBox Watermark="search all conversations..."
+               Text="{Binding SearchQuery, Mode=TwoWay}"
+               Background="Transparent"
+               BorderThickness="0"
+               FontSize="12"
+               Name="SearchQueryBox" />
+    </Border>
 
-    <!-- Results panel: overlapping layers in Row 2 -->
+    <!-- Results panel -->
     <Panel Grid.Row="2">
 
-      <!-- Loading indicator -->
       <ProgressBar IsIndeterminate="True"
                    IsVisible="{Binding IsLoading}"
                    VerticalAlignment="Top" />
 
-      <!-- "Start typing" empty state — before any search -->
-      <TextBlock Text="Start typing to search your messages."
-                 FontSize="16"
-                 Opacity="0.7"
+      <!-- Not yet searched -->
+      <TextBlock Text="start typing to search your messages"
+                 FontSize="12" Foreground="#404040"
                  HorizontalAlignment="Center"
                  VerticalAlignment="Center"
                  IsVisible="{Binding !HasSearched}" />
 
-      <!-- No results empty state -->
+      <!-- No results -->
       <StackPanel HorizontalAlignment="Center"
                   VerticalAlignment="Center"
-                  Spacing="8"
+                  Spacing="4"
                   IsVisible="{Binding ShowNoResults}">
         <TextBlock Text="{Binding EmptyStateHeading}"
-                   FontSize="16"
-                   FontWeight="SemiBold"
+                   FontSize="13" Foreground="#888888"
                    HorizontalAlignment="Center" />
         <TextBlock Text="{Binding EmptyStateBody}"
-                   FontSize="16"
-                   Opacity="0.7"
+                   FontSize="11" Foreground="#555555"
                    HorizontalAlignment="Center" />
       </StackPanel>
 
-      <!-- Results list (ListBox for keyboard navigation) -->
+      <!-- Results list -->
       <ListBox ItemsSource="{Binding SearchResults}"
                IsVisible="{Binding HasSearched}"
                SelectionMode="Single"
+               Background="Transparent"
+               BorderThickness="0"
                Name="ResultsList">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:SearchResultItemViewModel">
-            <Grid ColumnDefinitions="*,Auto" Margin="0,8">
-              <StackPanel Spacing="4">
-                <TextBlock Text="{Binding ChatName}"
-                           FontSize="16"
-                           FontWeight="SemiBold" />
-                <TextBlock Text="{Binding Snippet}"
-                           FontSize="16"
-                           Opacity="0.85"
-                           TextTrimming="CharacterEllipsis"
-                           TextWrapping="NoWrap" />
-              </StackPanel>
-              <StackPanel Grid.Column="1"
-                          HorizontalAlignment="Right"
-                          Spacing="4">
-                <TextBlock Text="{Binding Timestamp}"
-                           FontSize="13"
-                           Opacity="0.7" />
-              </StackPanel>
-            </Grid>
+            <Border BorderBrush="#141414" BorderThickness="0,0,0,1" Padding="12,8">
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <StackPanel Spacing="3">
+                  <TextBlock Text="{Binding ChatName}"
+                             FontSize="12" FontWeight="Bold"
+                             Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                  <TextBlock Text="{Binding Snippet}"
+                             FontSize="12" Foreground="#888888"
+                             TextTrimming="CharacterEllipsis" />
+                </StackPanel>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Timestamp}"
+                           FontSize="11" Foreground="#444444"
+                           VerticalAlignment="Top" />
+              </Grid>
+            </Border>
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>

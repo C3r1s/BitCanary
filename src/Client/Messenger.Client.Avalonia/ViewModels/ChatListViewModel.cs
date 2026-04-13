@@ -22,7 +22,8 @@ public sealed partial class ChatListViewModel : ViewModelBase
     private bool _isUserSearchMode;
 
     /// <summary>Set by MainWindowViewModel during construction to wire up global search.</summary>
-    public SearchViewModel? Search { get; set; }
+    [ObservableProperty]
+    private SearchViewModel? _search;
 
     /// <summary>Set by MainWindowViewModel during construction to wire up user-directory search.</summary>
     public UserSearchViewModel? UserSearch { get; set; }

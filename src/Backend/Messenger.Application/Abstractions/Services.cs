@@ -1,4 +1,5 @@
 using Messenger.Application.Messages;
+using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
 
 namespace Messenger.Application.Abstractions;
@@ -24,6 +25,10 @@ public interface IChatService
     Task<ChatSummaryDto> CreateChatAsync(CreateChatRequest request, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<FolderDto>> GetFoldersAsync(CancellationToken cancellationToken);
     Task<FolderDto> CreateFolderAsync(CreateFolderRequest request, CancellationToken cancellationToken);
+    Task<ChatSummaryDto> AddMemberAsync(Guid chatId, Guid userId, CancellationToken cancellationToken);
+    Task RemoveMemberAsync(Guid chatId, Guid userId, CancellationToken cancellationToken);
+    Task UpdateMemberRoleAsync(Guid chatId, Guid userId, ChatRole role, CancellationToken cancellationToken);
+    Task<ChatSummaryDto> UpdateChatAsync(Guid chatId, UpdateChatRequest request, CancellationToken cancellationToken);
 }
 
 public interface IMessageService

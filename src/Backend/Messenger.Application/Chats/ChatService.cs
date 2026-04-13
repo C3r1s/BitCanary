@@ -167,4 +167,16 @@ public sealed class ChatService(IAppDbContext dbContext, ICurrentUserContext cur
 
         return folder.ToDto();
     }
+
+    public Task<ChatSummaryDto> AddMemberAsync(Guid chatId, Guid userId, CancellationToken cancellationToken)
+        => throw new NotImplementedException();
+
+    public Task RemoveMemberAsync(Guid chatId, Guid userId, CancellationToken cancellationToken)
+        => throw new NotImplementedException();
+
+    public Task UpdateMemberRoleAsync(Guid chatId, Guid userId, ChatRole role, CancellationToken cancellationToken)
+        => throw new NotImplementedException();
+
+    public Task<ChatSummaryDto> UpdateChatAsync(Guid chatId, UpdateChatRequest request, CancellationToken cancellationToken)
+        => throw new NotImplementedException();
 }

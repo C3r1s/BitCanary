@@ -33,3 +33,9 @@ public sealed record ChatSummaryDto(
     MessageDto? LastMessage,
     int UnreadCount,
     IReadOnlyCollection<ChatMemberDto> Members);
+
+public sealed record AddMemberRequest(Guid UserId);
+
+public sealed record UpdateMemberRoleRequest(ChatRole Role);
+
+public sealed record UpdateChatRequest(string? Title, string? Description);

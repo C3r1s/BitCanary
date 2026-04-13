@@ -7,19 +7,37 @@
   <Border Classes="surface-card">
     <Grid RowDefinitions="Auto,*,Auto" RowSpacing="16">
 
-      <!-- Header row: title + search toggle button -->
-      <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+      <!-- Header row: title + [NEW CHAT] button + [SEARCH] button -->
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+        <!-- Normal mode label -->
         <TextBlock Text="Chats"
                    FontSize="22"
                    FontWeight="SemiBold"
-                   IsVisible="{Binding !IsSearchMode}"
+                   IsVisible="{Binding IsInNormalMode}"
                    VerticalAlignment="Center" />
+        <!-- Message search mode label -->
         <TextBlock Text="Search"
                    FontSize="22"
                    FontWeight="SemiBold"
                    IsVisible="{Binding IsSearchMode}"
                    VerticalAlignment="Center" />
+        <!-- User search mode label -->
+        <TextBlock Text="USER SEARCH"
+                   FontSize="12"
+                   FontWeight="Bold"
+                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                   IsVisible="{Binding IsUserSearchMode}"
+                   VerticalAlignment="Center" />
+        <!-- [NEW CHAT] button -->
         <Button Grid.Column="1"
+                Content="[ NEW CHAT ]"
+                Command="{Binding ToggleUserSearchCommand}"
+                Background="Transparent"
+                Padding="6,2"
+                FontSize="12"
+                ToolTip.Tip="Find a user to message" />
+        <!-- [SEARCH] button -->
+        <Button Grid.Column="2"
                 Content="&#128269;"
                 Command="{Binding ToggleSearchCommand}"
                 Background="Transparent"
@@ -28,11 +46,11 @@
                 ToolTip.Tip="Search messages" />
       </Grid>
 
-      <!-- Chat list mode (IsSearchMode = false) -->
+      <!-- Chat list mode (IsInNormalMode = true) -->
       <Grid Grid.Row="1"
             RowDefinitions="Auto,*"
             RowSpacing="16"
-            IsVisible="{Binding !IsSearchMode}">
+            IsVisible="{Binding IsInNormalMode}">
         <TextBox Watermark="Search conversations"
                  Text="{Binding SearchText, Mode=TwoWay}" />
 
@@ -79,6 +97,11 @@
       <!-- Search results mode (IsSearchMode = true) -->
       <Panel Grid.Row="1" IsVisible="{Binding IsSearchMode}">
         <views:SearchResultsView DataContext="{Binding Search}" />
+      </Panel>
+
+      <!-- User search panel (IsUserSearchMode = true — Panel wrapper per AVLN2000 Pitfall 4) -->
+      <Panel Grid.Row="1" IsVisible="{Binding IsUserSearchMode}">
+        <views:UserSearchView DataContext="{Binding UserSearch}" />
       </Panel>
 
       <!-- Settings gear button pinned at bottom -->

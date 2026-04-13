@@ -25,4 +25,10 @@ public sealed class UsersController(IUserService userService) : ControllerBase
     [HttpPut("me/settings")]
     public Task<UserSettingsDto> UpdateSettings(UpdateSettingsRequest request, CancellationToken cancellationToken) =>
         userService.UpdateSettingsAsync(request, cancellationToken);
+
+    [HttpGet("search")]
+    public Task<IReadOnlyCollection<UserProfileDto>> SearchUsers(
+        [FromQuery] string q,
+        CancellationToken cancellationToken)
+        => userService.SearchUsersAsync(q, cancellationToken);
 }

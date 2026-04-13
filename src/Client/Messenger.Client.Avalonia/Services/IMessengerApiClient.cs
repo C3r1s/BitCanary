@@ -29,4 +29,8 @@ public interface IMessengerApiClient
     Task<KeyBundleDto?> GetKeyBundleAsync(Guid userId, CancellationToken cancellationToken = default);
     Task<BundleUploadResponse> UploadKeyBundleAsync(KeyBundleUploadRequest request, CancellationToken cancellationToken = default);
     Task<OtpkReplenishResponse> ReplenishOtpksAsync(OtpkReplenishRequest request, CancellationToken cancellationToken = default);
+
+    // User search & chat creation
+    Task<IReadOnlyCollection<UserProfileDto>> SearchUsersAsync(string query, CancellationToken cancellationToken = default);
+    Task<ChatSummaryDto> CreateChatAsync(CreateChatRequest request, CancellationToken cancellationToken = default);
 }

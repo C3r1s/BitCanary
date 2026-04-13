@@ -18,14 +18,28 @@ public sealed partial class ChatListViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isSearchMode;
 
+    [ObservableProperty]
+    private bool _isUserSearchMode;
+
     /// <summary>Set by MainWindowViewModel during construction to wire up global search.</summary>
     public SearchViewModel? Search { get; set; }
+
+    /// <summary>Set by MainWindowViewModel during construction to wire up user-directory search.</summary>
+    public UserSearchViewModel? UserSearch { get; set; }
+
+    /// <summary>True when neither message search nor user search is active.</summary>
+    public bool IsInNormalMode => !IsSearchMode && !IsUserSearchMode;
+
+    partial void OnIsSearchModeChanged(bool _) => OnPropertyChanged(nameof(IsInNormalMode));
+    partial void OnIsUserSearchModeChanged(bool _) => OnPropertyChanged(nameof(IsInNormalMode));
 
     public ObservableCollection<ChatListItemViewModel> Chats { get; } = new();
 
     public IAsyncRelayCommand RefreshCommand { get; }
 
     public IRelayCommand ToggleSearchCommand { get; }
+
+    public IRelayCommand ToggleUserSearchCommand { get; }
 
     public ChatListViewModel(Func<Task> refreshAsync)
     {
@@ -39,8 +53,24 @@ public sealed partial class ChatListViewModel : ViewModelBase
             }
             else
             {
+                IsUserSearchMode = false;   // mutual exclusion per Pitfall 3
+                UserSearch?.Reset();
                 IsSearchMode = true;
                 // View code-behind focuses search box when IsSearchMode becomes true
+            }
+        });
+        ToggleUserSearchCommand = new RelayCommand(() =>
+        {
+            if (IsUserSearchMode)
+            {
+                IsUserSearchMode = false;
+                UserSearch?.Reset();
+            }
+            else
+            {
+                IsSearchMode = false;   // mutual exclusion
+                Search?.Reset();
+                IsUserSearchMode = true;
             }
         });
     }

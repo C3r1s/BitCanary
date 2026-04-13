@@ -1,0 +1,92 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
+             x:Class="Messenger.Client.Avalonia.Views.UserSearchView"
+             x:DataType="vm:UserSearchViewModel">
+
+  <Grid RowDefinitions="Auto,Auto,*">
+
+    <!-- Row 0: intentionally empty — header label is in ChatListView -->
+
+    <!-- Row 1: Search input -->
+    <Border Grid.Row="1" Background="#1A1A1A" CornerRadius="4" Padding="12,8" Margin="0,0,0,8">
+      <TextBox x:Name="SearchInput"
+               Text="{Binding SearchQuery, Mode=TwoWay}"
+               Watermark="search users..."
+               Background="Transparent"
+               BorderThickness="0"
+               FontSize="12" />
+    </Border>
+
+    <!-- Row 2: Results area -->
+    <Panel Grid.Row="2">
+
+      <!-- Loading indicator -->
+      <ProgressBar IsIndeterminate="True"
+                   IsVisible="{Binding IsLoading}"
+                   VerticalAlignment="Top"
+                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+
+      <!-- Idle prompt (before 2 chars typed) -->
+      <TextBlock Text="type 2+ characters to find users"
+                 IsVisible="{Binding !HasSearched}"
+                 Foreground="#404040"
+                 FontSize="12"
+                 HorizontalAlignment="Center"
+                 VerticalAlignment="Center" />
+
+      <!-- No results -->
+      <StackPanel IsVisible="{Binding ShowNoResults}"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Spacing="4">
+        <TextBlock Text="no users found"
+                   FontSize="13"
+                   Foreground="#888888"
+                   HorizontalAlignment="Center" />
+        <TextBlock Text="try a different name or username"
+                   FontSize="12"
+                   Foreground="#505050"
+                   HorizontalAlignment="Center" />
+      </StackPanel>
+
+      <!-- Error banner -->
+      <Border IsVisible="{Binding HasError}"
+              Background="#1C1000"
+              BorderBrush="#E08800"
+              BorderThickness="1"
+              CornerRadius="4"
+              Padding="12,8"
+              Margin="0,4"
+              VerticalAlignment="Top">
+        <TextBlock Text="{Binding ErrorMessage}"
+                   Foreground="#E08800"
+                   FontSize="12"
+                   TextWrapping="Wrap" />
+      </Border>
+
+      <!-- Result list -->
+      <ListBox x:Name="ResultsList"
+               ItemsSource="{Binding Results}"
+               IsVisible="{Binding HasSearched}"
+               Background="Transparent"
+               BorderThickness="0">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:UserResultItemViewModel">
+            <Border Padding="12,8" BorderBrush="#141414" BorderThickness="0,0,0,1">
+              <StackPanel Spacing="4">
+                <TextBlock Text="{Binding DisplayName}"
+                           FontSize="13"
+                           FontWeight="Bold"
+                           Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                <TextBlock Text="{Binding Username}"
+                           FontSize="12"
+                           Foreground="#888888" />
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Panel>
+  </Grid>
+</UserControl>

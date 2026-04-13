@@ -200,6 +200,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ChatList.Search = searchVm;
         ToggleGlobalSearchCommand = new RelayCommand(() => ChatList.ToggleSearchCommand.Execute(null));
 
+        // Wire user-directory search
+        var userSearchVm = new UserSearchViewModel(_apiClient, HandleUserSelectedAsync);
+        ChatList.UserSearch = userSearchVm;
+
         ShowSafetyNumberCommand = new RelayCommand(
             () => _ = ShowSafetyNumberAsync(),
             () => ChatList.SelectedChat is not null);
@@ -269,6 +273,55 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ChatList.SelectedChat = chatItem;
         }
         // v1: navigating to the chat is sufficient; scrolling to specific message is a stretch goal
+    }
+
+    private async Task HandleUserSelectedAsync(UserProfileDto selectedUser)
+    {
+        // D-02: find existing direct chat with this peer
+        var existing = ChatList.Chats.FirstOrDefault(c =>
+            c.Type == Messenger.Shared.Contracts.ChatType.Direct && c.PeerUserId == selectedUser.Id);
+
+        if (existing is not null)
+        {
+            ChatList.IsUserSearchMode = false;
+            ChatList.UserSearch?.Reset();
+            NavigateToChatAsync(existing.Id);
+            return;
+        }
+
+        // No existing chat — create one via API
+        if (ChatList.UserSearch is not null)
+            ChatList.UserSearch.IsBusy = true;
+        try
+        {
+            var request = new Messenger.Shared.Contracts.Dtos.CreateChatRequest(
+                Title: selectedUser.DisplayName,
+                Type: Messenger.Shared.Contracts.ChatType.Direct,
+                Description: null,
+                MemberIds: new[] { _sessionService.CurrentUserId, selectedUser.Id });
+
+            var newChat = await _apiClient.CreateChatAsync(request);
+
+            // Refresh chat list so new chat appears, then navigate
+            // Per Pitfall 6: await refresh, THEN navigate — safe sequence
+            await RefreshRemoteDataAsync();
+            ChatList.IsUserSearchMode = false;
+            ChatList.UserSearch?.Reset();
+            NavigateToChatAsync(newChat.Id);
+        }
+        catch
+        {
+            if (ChatList.UserSearch is not null)
+            {
+                ChatList.UserSearch.HasError = true;
+                ChatList.UserSearch.ErrorMessage = "could not open chat -- try again";
+            }
+        }
+        finally
+        {
+            if (ChatList.UserSearch is not null)
+                ChatList.UserSearch.IsBusy = false;
+        }
     }
 
     /// <summary>

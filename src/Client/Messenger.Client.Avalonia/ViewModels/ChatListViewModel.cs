@@ -21,6 +21,9 @@ public sealed partial class ChatListViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isUserSearchMode;
 
+    [ObservableProperty]
+    private bool _isGroupCreationMode;
+
     /// <summary>Set by MainWindowViewModel during construction to wire up global search.</summary>
     [ObservableProperty]
     private SearchViewModel? _search;
@@ -28,11 +31,15 @@ public sealed partial class ChatListViewModel : ViewModelBase
     /// <summary>Set by MainWindowViewModel during construction to wire up user-directory search.</summary>
     public UserSearchViewModel? UserSearch { get; set; }
 
-    /// <summary>True when neither message search nor user search is active.</summary>
-    public bool IsInNormalMode => !IsSearchMode && !IsUserSearchMode;
+    /// <summary>Set by MainWindowViewModel during construction to wire up group creation.</summary>
+    public GroupCreationViewModel? GroupCreation { get; set; }
+
+    /// <summary>True when no search or creation mode is active.</summary>
+    public bool IsInNormalMode => !IsSearchMode && !IsUserSearchMode && !IsGroupCreationMode;
 
     partial void OnIsSearchModeChanged(bool _) => OnPropertyChanged(nameof(IsInNormalMode));
     partial void OnIsUserSearchModeChanged(bool _) => OnPropertyChanged(nameof(IsInNormalMode));
+    partial void OnIsGroupCreationModeChanged(bool _) => OnPropertyChanged(nameof(IsInNormalMode));
 
     public ObservableCollection<ChatListItemViewModel> Chats { get; } = new();
 
@@ -41,6 +48,8 @@ public sealed partial class ChatListViewModel : ViewModelBase
     public IRelayCommand ToggleSearchCommand { get; }
 
     public IRelayCommand ToggleUserSearchCommand { get; }
+
+    public IRelayCommand ToggleGroupCreationCommand { get; }
 
     public ChatListViewModel(Func<Task> refreshAsync)
     {
@@ -71,7 +80,26 @@ public sealed partial class ChatListViewModel : ViewModelBase
             {
                 IsSearchMode = false;   // mutual exclusion
                 Search?.Reset();
+                IsGroupCreationMode = false;
+                GroupCreation?.Reset();
                 IsUserSearchMode = true;
+            }
+        });
+
+        ToggleGroupCreationCommand = new RelayCommand(() =>
+        {
+            if (IsGroupCreationMode)
+            {
+                IsGroupCreationMode = false;
+                GroupCreation?.Reset();
+            }
+            else
+            {
+                IsSearchMode = false;
+                Search?.Reset();
+                IsUserSearchMode = false;
+                UserSearch?.Reset();
+                IsGroupCreationMode = true;
             }
         });
     }

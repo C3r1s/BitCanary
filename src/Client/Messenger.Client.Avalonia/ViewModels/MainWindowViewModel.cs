@@ -210,6 +210,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var userSearchVm = new UserSearchViewModel(_apiClient, HandleUserSelectedAsync);
         ChatList.UserSearch = userSearchVm;
 
+        // Wire group creation
+        var groupCreationVm = new GroupCreationViewModel(
+            (query, ct) => _apiClient.SearchUsersAsync(query, ct),
+            HandleGroupCreatedAsync);
+        ChatList.GroupCreation = groupCreationVm;
+
         ShowSafetyNumberCommand = new RelayCommand(
             () => _ = ShowSafetyNumberAsync(),
             () => ChatList.SelectedChat is not null);
@@ -328,6 +334,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             if (ChatList.UserSearch is not null)
                 ChatList.UserSearch.IsBusy = false;
         }
+    }
+
+    private async Task HandleGroupCreatedAsync(Messenger.Shared.Contracts.Dtos.CreateChatRequest request)
+    {
+        ChatList.IsGroupCreationMode = false;
+        ChatList.GroupCreation?.Reset();
+        var newChat = await _apiClient.CreateChatAsync(request);
+        await RefreshRemoteDataAsync();
+        NavigateToChatAsync(newChat.Id);
     }
 
     /// <summary>
@@ -992,21 +1007,36 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             // Determine peer for 1-to-1 chats (used for E2E encryption recipient)
             var peer = chat.Members?.FirstOrDefault(m => m.UserId != _sessionService.CurrentUserId);
 
-            string subtitle;
+            string decryptedSubtitle;
             if (chat.LastMessage is null)
             {
-                subtitle = "No messages yet";
+                decryptedSubtitle = string.Empty;
             }
             else
             {
                 try
                 {
-                    subtitle = await _encryptionService.DecryptAsync(chat.LastMessage);
+                    decryptedSubtitle = await _encryptionService.DecryptAsync(chat.LastMessage);
                 }
                 catch
                 {
-                    subtitle = "[Unable to decrypt]";
+                    decryptedSubtitle = "[Unable to decrypt]";
                 }
+            }
+
+            // For group chats, show member count as subtitle; for direct chats use last message preview
+            var isGroup = chat.Type == Messenger.Shared.Contracts.ChatType.Group;
+            string subtitle;
+            if (isGroup)
+            {
+                var count = chat.Members?.Count ?? 0;
+                subtitle = count > 0
+                    ? $"{count} member{(count == 1 ? "" : "s")}"
+                    : "group";
+            }
+            else
+            {
+                subtitle = decryptedSubtitle;
             }
 
             var lastActivity = chat.LastMessage is not null
@@ -1019,6 +1049,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 Title = chat.Title,
                 Type = chat.Type,
                 PeerUserId = peer?.UserId ?? Guid.Empty,
+                MemberCount = chat.Members?.Count ?? 0,
                 Subtitle = subtitle,
                 LastActivity = lastActivity,
                 UnreadCount = chat.UnreadCount

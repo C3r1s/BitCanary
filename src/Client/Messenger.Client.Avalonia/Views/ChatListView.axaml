@@ -12,7 +12,7 @@
             BorderBrush="#1E1E1E"
             BorderThickness="0,0,0,1"
             Padding="12,10">
-      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4">
         <TextBlock Text="CHANNELS"
                    FontSize="12" FontWeight="Bold"
                    Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
@@ -28,6 +28,11 @@
                    Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                    IsVisible="{Binding IsSearchMode}"
                    VerticalAlignment="Center" />
+        <TextBlock Text="GROUP CREATION"
+                   FontSize="12" FontWeight="Bold"
+                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                   IsVisible="{Binding IsGroupCreationMode}"
+                   VerticalAlignment="Center" />
         <Button Grid.Column="1"
                 Content="[ NEW CHAT ]"
                 Command="{Binding ToggleUserSearchCommand}"
@@ -37,6 +42,14 @@
                 FontSize="12"
                 ToolTip.Tip="Find a user" />
         <Button Grid.Column="2"
+                Content="[ NEW GROUP ]"
+                Command="{Binding ToggleGroupCreationCommand}"
+                Background="Transparent"
+                Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                Padding="6,2"
+                FontSize="12"
+                ToolTip.Tip="Create a group" />
+        <Button Grid.Column="3"
                 Content="[SEARCH]"
                 Command="{Binding ToggleSearchCommand}"
                 Background="Transparent"
@@ -112,6 +125,11 @@
     <!-- User search mode -->
     <Panel Grid.Row="2" IsVisible="{Binding IsUserSearchMode}">
       <views:UserSearchView DataContext="{Binding UserSearch}" />
+    </Panel>
+
+    <!-- Group creation mode — AVLN2000-safe Panel wrapper -->
+    <Panel Grid.Row="2" IsVisible="{Binding IsGroupCreationMode}">
+      <views:GroupCreationView DataContext="{Binding GroupCreation}" />
     </Panel>
 
     <!-- Settings button pinned at bottom -->

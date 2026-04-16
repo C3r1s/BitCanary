@@ -27,8 +27,26 @@ public sealed partial class ChatWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _findMatchSummary = string.Empty;
 
+    [ObservableProperty]
+    private bool _isGroupChat;
+
+    [ObservableProperty]
+    private bool _isGroupInfoVisible;
+
+    [ObservableProperty]
+    private int _groupMemberCount;
+
     /// <summary>Set by MainWindowViewModel to forward ShowSafetyNumberCommand into the header.</summary>
     public IRelayCommand? ShowSafetyNumberCommand { get; set; }
+
+    /// <summary>Set by MainWindowViewModel to wire group info operations.</summary>
+    public GroupInfoViewModel? GroupInfo { get; set; }
+
+    /// <summary>Set by MainWindowViewModel to show the group info panel.</summary>
+    public IRelayCommand? ShowGroupInfoCommand { get; set; }
+
+    /// <summary>Set by MainWindowViewModel to close the group info panel.</summary>
+    public IRelayCommand? CloseGroupInfoCommand { get; set; }
 
     public IRelayCommand OpenFindBarCommand { get; }
 

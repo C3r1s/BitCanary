@@ -32,6 +32,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly INotificationService _notificationService;
     private Guid? _pendingNavigationChatId;
     private readonly Dictionary<Guid, MessageItemViewModel> _outgoingVmByClientId = new();
+    private readonly Dictionary<Guid, ChatSummaryDto> _chatSummaryCache = new();
 
     [ObservableProperty]
     private string _statusMessage = "Loading local cache...";
@@ -228,6 +229,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         // Wire ShowSafetyNumberCommand into ChatWindow so header can bind to it
         ChatWindow.ShowSafetyNumberCommand = ShowSafetyNumberCommand;
+
+        // Wire GroupInfoViewModel into ChatWindow for group chat member management
+        var groupInfoVm = new GroupInfoViewModel(
+            (chatId, userId) => _apiClient.AddMemberAsync(chatId, userId),
+            (chatId, userId) => _apiClient.RemoveMemberAsync(chatId, userId),
+            (chatId, userId, role) => _apiClient.UpdateMemberRoleAsync(chatId, userId, role),
+            (chatId, req) => _apiClient.UpdateChatAsync(chatId, req),
+            () => ChatWindow.IsGroupInfoVisible = false);
+        ChatWindow.GroupInfo = groupInfoVm;
+        ChatWindow.ShowGroupInfoCommand = new RelayCommand(() => ChatWindow.IsGroupInfoVisible = true);
+        ChatWindow.CloseGroupInfoCommand = new RelayCommand(() => ChatWindow.IsGroupInfoVisible = false);
 
         MessageInput = new MessageInputViewModel(
             SendMessageAsync,
@@ -589,7 +601,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         ChatWindow.Title = selectedChat.Title;
-        ChatWindow.Subtitle = selectedChat.Type.ToString();
+        ChatWindow.IsGroupChat = selectedChat.IsGroupChat;
+        ChatWindow.GroupMemberCount = selectedChat.MemberCount;
+
+        if (selectedChat.IsGroupChat)
+        {
+            ChatWindow.Subtitle = selectedChat.MemberCount > 0
+                ? $"{selectedChat.MemberCount} member{(selectedChat.MemberCount == 1 ? "" : "s")}"
+                : "group";
+        }
+        else
+        {
+            ChatWindow.Subtitle = selectedChat.Type.ToString();
+            ChatWindow.IsGroupInfoVisible = false;
+        }
+
         StatusMessage = $"Loading {selectedChat.Title}...";
 
         // Reset unread count when opening chat (per D-07)
@@ -632,6 +658,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 await _realtimeClient.JoinChatAsync(selectedChat.Id);
                 // Notify senders that their messages have been read (D-03, D-07)
                 await _realtimeClient.SendReadReceiptAsync(selectedChat.Id);
+
+                // Load group info panel for group chats
+                if (selectedChat.IsGroupChat && ChatWindow.GroupInfo is not null)
+                {
+                    _chatSummaryCache.TryGetValue(selectedChat.Id, out var summary);
+                    if (summary is not null)
+                        await ChatWindow.GroupInfo.LoadAsync(summary, _sessionService.CurrentUserId);
+                }
+
                 StatusMessage = $"{selectedChat.Title} ready.";
             }
             catch (Exception ex) when (ex is System.Net.Http.HttpRequestException
@@ -983,6 +1018,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private async Task ApplyChatSummariesAsync(IReadOnlyCollection<ChatSummaryDto> chats)
     {
         ChatList.Chats.Clear();
+        _chatSummaryCache.Clear();
 
         foreach (var chat in chats)
         {
@@ -1021,8 +1057,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 PeerUserId = peer?.UserId ?? Guid.Empty,
                 Subtitle = subtitle,
                 LastActivity = lastActivity,
-                UnreadCount = chat.UnreadCount
+                UnreadCount = chat.UnreadCount,
+                MemberCount = chat.Members?.Count ?? 0
             });
+            _chatSummaryCache[chat.Id] = chat;
         }
 
         ChatList.SelectedChat ??= ChatList.Chats.FirstOrDefault();

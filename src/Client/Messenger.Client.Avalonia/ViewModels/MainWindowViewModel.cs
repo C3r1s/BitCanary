@@ -1088,8 +1088,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 MemberCount = chat.Members?.Count ?? 0,
                 Subtitle = subtitle,
                 LastActivity = lastActivity,
-                UnreadCount = chat.UnreadCount,
-                MemberCount = chat.Members?.Count ?? 0
+                UnreadCount = chat.UnreadCount
             });
             _chatSummaryCache[chat.Id] = chat;
         }

@@ -33,3 +33,5 @@ public sealed record ChatSummaryDto(
     MessageDto? LastMessage,
     int UnreadCount,
     IReadOnlyCollection<ChatMemberDto> Members);
+
+public sealed record UpdateChatRequest(string? Title, string? Description);

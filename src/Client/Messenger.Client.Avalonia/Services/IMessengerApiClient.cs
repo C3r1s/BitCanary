@@ -33,4 +33,10 @@ public interface IMessengerApiClient
     // User search & chat creation
     Task<IReadOnlyCollection<UserProfileDto>> SearchUsersAsync(string query, CancellationToken cancellationToken = default);
     Task<ChatSummaryDto> CreateChatAsync(CreateChatRequest request, CancellationToken cancellationToken = default);
+
+    // Group member management
+    Task<ChatSummaryDto> AddMemberAsync(Guid chatId, Guid userId, CancellationToken cancellationToken = default);
+    Task RemoveMemberAsync(Guid chatId, Guid userId, CancellationToken cancellationToken = default);
+    Task UpdateMemberRoleAsync(Guid chatId, Guid userId, ChatRole role, CancellationToken cancellationToken = default);
+    Task<ChatSummaryDto> UpdateChatAsync(Guid chatId, UpdateChatRequest request, CancellationToken cancellationToken = default);
 }

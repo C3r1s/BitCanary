@@ -385,6 +385,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ChatList.Chats.Clear();
         ChatWindow.Messages.Clear();
         _messageCache.Clear();
+        _chatSummaryCache.Clear();
+        // Invalidate the local chats cache so a subsequent login never loads the previous user's chats.
+        _ = _localCacheService.SaveAsync("chats", Array.Empty<ChatSummaryDto>());
         IsLoggedIn = false;
         CurrentUsername = string.Empty;
         StatusMessage = "Loading local cache...";
@@ -460,35 +463,33 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             StatusMessage = "Key upload failed -- messages may use legacy encryption";
         }
 
+        // Connect SignalR. Failures are non-fatal for data loading — we still fetch chats via HTTP below.
         try
         {
             await _realtimeClient.ConnectAsync();
             IsConnected = true;
             ConnectionState = Messenger.Shared.Contracts.ConnectionState.Online;
             Settings.ConnectionStatus = $"Connected · {_sessionService.ApiBaseUrl}";
-            await RefreshRemoteDataAsync();
         }
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
         {
-            // Token is likely expired or invalid. Force logout.
+            // Token is likely expired or invalid. Force logout — skip data fetch.
             Logout();
             StatusMessage = "Your session has expired. Please log in again.";
+            return;
         }
-        catch (Exception ex) when (ex is HttpRequestException
-                                       or SocketException
-                                       or TaskCanceledException
-                                       or OperationCanceledException)
+        catch (Exception ex)
         {
-            // D-10: Any network failure — fall back to offline mode immediately (no delay).
-            // InitializeAsync already called LoadCachedChatsAsync which populated ChatList.Chats
-            // from SQLite — those items remain visible. No SQLite reads blocked here.
-            // D-11: RefreshRemoteDataAsync failure does not affect SQLite path.
+            // D-10: Any SignalR failure (network, InvalidOperationException from stale connection, etc.)
+            // → offline mode. Still attempt RefreshRemoteDataAsync so the HTTP API can serve cached data.
             ConnectionState = Messenger.Shared.Contracts.ConnectionState.Offline;
             IsConnected = false;
             Settings.ConnectionStatus = "Offline — showing cached data";
             StatusMessage = string.Empty;
-            System.Diagnostics.Debug.WriteLine($"[ConnectAndLoadAsync] Offline fallback: {ex.GetType().Name}: {ex.Message}");
+            System.Diagnostics.Debug.WriteLine($"[ConnectAndLoadAsync] SignalR fallback: {ex.GetType().Name}: {ex.Message}");
         }
+
+        await RefreshRemoteDataAsync();
     }
 
     private async Task HandleOtpkSupplyLowAsync()
@@ -924,12 +925,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
             await UpdateChatPreviewAsync(message);
-
-            if (ChatList.SelectedChat?.Id == message.ChatId)
-            {
-                await AppendMessageToWindowAsync(message);
-            }
-
+            // AppendMessageAsync adds to _messageCache (so PersistMessagesAsync saves correctly)
+            // and conditionally adds to ChatWindow.Messages when this chat is selected.
+            await AppendMessageAsync(message);
             chatItem = ChatList.Chats.FirstOrDefault(c => c.Id == message.ChatId);
         });
 

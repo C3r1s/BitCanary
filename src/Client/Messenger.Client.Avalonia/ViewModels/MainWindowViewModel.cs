@@ -850,31 +850,36 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         var plaintext = vm.DisplayText;
         var recipientUserId = selectedChat.PeerUserId;
-        var encrypted = await _encryptionService.EncryptTextAsync(plaintext, recipientUserId);
-
-        var request = new SendMessageRequest(
-            selectedChat.Id,
-            clientMessageId,  // Same Guid — server deduplicates
-            encrypted.Kind,
-            encrypted.EncryptedPayload,
-            encrypted.EncryptionAlgorithm,
-            encrypted.KeyEnvelope,
-            null,
-            null,
-            encrypted.MetadataJson,
-            ProtocolVersion.SignalProtocol);
 
         try
         {
+            var encrypted = await _encryptionService.EncryptTextAsync(plaintext, recipientUserId);
+
+            var request = new SendMessageRequest(
+                selectedChat.Id,
+                clientMessageId,  // Same Guid — server deduplicates
+                encrypted.Kind,
+                encrypted.EncryptedPayload,
+                encrypted.EncryptionAlgorithm,
+                encrypted.KeyEnvelope,
+                null,
+                null,
+                encrypted.MetadataJson,
+                ProtocolVersion.SignalProtocol);
+
             var message = await _apiClient.SendMessageAsync(request);
             // Success — persist server-confirmed message
             await AppendMessageAsync(message);
             await PersistMessagesAsync(selectedChat.Id);
         }
-        catch (Exception ex) when (ex is HttpRequestException or OperationCanceledException or TaskCanceledException)
+        catch (Exception ex) when (ex is HttpRequestException
+                                       or OperationCanceledException
+                                       or TaskCanceledException
+                                       or InvalidOperationException)
         {
-            // Still offline / failed — revert VM status to Failed
-            // (ExecuteRetryAsync set it to Sending before calling here)
+            // Covers network errors and encryption failures (e.g. recipient has not published keys yet).
+            // Revert VM status to Failed so the retry button remains visible.
+            System.Diagnostics.Debug.WriteLine($"[RetryMessageAsync] Failed: {ex.GetType().Name}: {ex.Message}");
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 vm.Status = MessageStatus.Failed;

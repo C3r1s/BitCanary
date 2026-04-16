@@ -15,10 +15,10 @@ public sealed partial class ChatListItemViewModel : ViewModelBase
     /// </summary>
     public Guid PeerUserId { get; init; }
 
-    /// <summary>True for group chats (ChatType.Group = 2).</summary>
-    public bool IsGroupChat => Type == ChatType.Group;
+    /// <summary>True when this chat is a group or channel (not a direct chat).</summary>
+    public bool IsGroupChat => Type != ChatType.Direct;
 
-    /// <summary>Number of members — populated from ChatSummaryDto.Members.Count for group chats.</summary>
+    /// <summary>Number of members in the chat (from ChatSummaryDto.Members.Count).</summary>
     public int MemberCount { get; init; }
 
     [ObservableProperty]

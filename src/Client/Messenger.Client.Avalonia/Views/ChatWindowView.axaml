@@ -4,7 +4,7 @@
              xmlns:views="using:Messenger.Client.Avalonia.Views"
              x:Class="Messenger.Client.Avalonia.Views.ChatWindowView"
              x:DataType="vm:ChatWindowViewModel">
-  <Grid RowDefinitions="Auto,Auto,Auto,*">
+  <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,*">
 
     <!-- Row 0: Find bar (collapsible) -->
     <Border Grid.Row="0"
@@ -49,6 +49,14 @@
                     Orientation="Horizontal"
                     Spacing="8"
                     VerticalAlignment="Center">
+
+          <!-- [ INFO ] button — group chats only -->
+          <Button Content="[ INFO ]"
+                  Command="{Binding ShowGroupInfoCommand}"
+                  IsVisible="{Binding IsGroupChat}"
+                  Background="Transparent"
+                  Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                  Padding="6,3" FontSize="11" />
 
           <!-- Safety Number pill -->
           <Button Background="Transparent" Padding="0"
@@ -212,6 +220,16 @@
         </ItemsControl>
       </ScrollViewer>
     </Panel>
+
+    <!-- Column 1: Group info panel (right side, all rows) -->
+    <Border Grid.Column="1"
+            Grid.RowSpan="4"
+            IsVisible="{Binding IsGroupInfoVisible}"
+            Width="240"
+            BorderBrush="#1E1E1E"
+            BorderThickness="1,0,0,0">
+      <views:GroupInfoView DataContext="{Binding GroupInfo}" />
+    </Border>
 
   </Grid>
 </UserControl>

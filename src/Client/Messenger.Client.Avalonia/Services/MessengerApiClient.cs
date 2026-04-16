@@ -166,6 +166,41 @@ public sealed class MessengerApiClient(IClientSessionService sessionService) : I
         return (await response.Content.ReadFromJsonAsync<ChatSummaryDto>(cancellationToken))!;
     }
 
+    // ── Group member management ─────────────────────────────────────────
+
+    public async Task<ChatSummaryDto> AddMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default)
+    {
+        using var req = Authorized(HttpMethod.Post, $"api/chats/{chatId}/members");
+        req.Content = JsonContent.Create(new { UserId = userId });
+        var response = await _http.SendAsync(req, ct);
+        await EnsureSuccessAsync(response, ct);
+        return (await response.Content.ReadFromJsonAsync<ChatSummaryDto>(ct))!;
+    }
+
+    public async Task RemoveMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default)
+    {
+        using var req = Authorized(HttpMethod.Delete, $"api/chats/{chatId}/members/{userId}");
+        var response = await _http.SendAsync(req, ct);
+        await EnsureSuccessAsync(response, ct);
+    }
+
+    public async Task UpdateMemberRoleAsync(Guid chatId, Guid userId, ChatRole role, CancellationToken ct = default)
+    {
+        using var req = Authorized(HttpMethod.Patch, $"api/chats/{chatId}/members/{userId}/role");
+        req.Content = JsonContent.Create(new { Role = role });
+        var response = await _http.SendAsync(req, ct);
+        await EnsureSuccessAsync(response, ct);
+    }
+
+    public async Task<ChatSummaryDto> UpdateChatAsync(Guid chatId, UpdateChatRequest request, CancellationToken ct = default)
+    {
+        using var req = Authorized(HttpMethod.Patch, $"api/chats/{chatId}");
+        req.Content = JsonContent.Create(request);
+        var response = await _http.SendAsync(req, ct);
+        await EnsureSuccessAsync(response, ct);
+        return (await response.Content.ReadFromJsonAsync<ChatSummaryDto>(ct))!;
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────
 
     /// <summary>

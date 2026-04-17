@@ -6,10 +6,15 @@ namespace Messenger.Client.Avalonia.Services;
 
 /// <summary>
 /// SQLite-backed implementation of <see cref="ILocalMessageRepository"/>.
-/// Receives an open <see cref="SqliteConnection"/> (schema already applied by <see cref="DatabaseService"/>).
+/// All reads and writes are scoped to <see cref="IClientSessionService.CurrentUserId"/>
+/// via the <c>owner_user_id</c> column (added in schema V5).
 /// </summary>
-public sealed class LocalMessageRepository(SqliteConnection connection) : ILocalMessageRepository
+public sealed class LocalMessageRepository(
+    SqliteConnection connection,
+    IClientSessionService sessionService) : ILocalMessageRepository
 {
+    private string OwnerId => sessionService.CurrentUserId.ToString();
+
     // ── Messages ──────────────────────────────────────────────────────────
 
     /// <inheritdoc/>
@@ -21,16 +26,16 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = """
             INSERT OR IGNORE INTO messages
-                (id, chat_id, sender_id, client_message_id, protocol_version,
+                (id, owner_user_id, chat_id, sender_id, client_message_id, protocol_version,
                  encrypted_payload, key_envelope, encryption_algorithm, sent_at)
             VALUES
-                (@id, @chatId, @senderId, @clientMessageId, @protocolVersion,
+                (@id, @ownerId, @chatId, @senderId, @clientMessageId, @protocolVersion,
                  @encryptedPayload, @keyEnvelope, @encryptionAlgorithm, @sentAt)
             """;
         cmd.Parameters.AddWithValue("@id", message.Id.ToString());
+        cmd.Parameters.AddWithValue("@ownerId", OwnerId);
         cmd.Parameters.AddWithValue("@chatId", message.ChatId.ToString());
         cmd.Parameters.AddWithValue("@senderId", message.SenderId.ToString());
-        // MessageDto does not have a separate ClientMessageId; use Id for dedup
         cmd.Parameters.AddWithValue("@clientMessageId", message.Id.ToString());
         cmd.Parameters.AddWithValue("@protocolVersion", protocolVersion);
         cmd.Parameters.AddWithValue("@encryptedPayload", message.EncryptedPayload);
@@ -51,9 +56,11 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
                    encrypted_payload, key_envelope, encryption_algorithm, sent_at
             FROM messages
             WHERE chat_id = @chatId
+              AND owner_user_id = @ownerId
             ORDER BY sent_at ASC
             """;
         cmd.Parameters.AddWithValue("@chatId", chatId.ToString());
+        cmd.Parameters.AddWithValue("@ownerId", OwnerId);
 
         var results = new List<MessageDto>();
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -63,8 +70,8 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
                 Id: Guid.Parse(reader.GetString(0)),
                 ChatId: Guid.Parse(reader.GetString(1)),
                 SenderId: Guid.Parse(reader.GetString(2)),
-                SenderDisplayName: string.Empty,   // not stored; populated from server on next sync
-                Kind: MessageKind.Text,             // not stored; default for legacy messages
+                SenderDisplayName: string.Empty,
+                Kind: MessageKind.Text,
                 EncryptedPayload: reader.GetString(3),
                 EncryptionAlgorithm: reader.GetString(5),
                 KeyEnvelope: reader.GetString(4),
@@ -85,9 +92,13 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
         CancellationToken cancellationToken = default)
     {
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText =
-            "SELECT COUNT(*) FROM messages WHERE client_message_id = @id";
+        cmd.CommandText = """
+            SELECT COUNT(*) FROM messages
+            WHERE client_message_id = @id
+              AND owner_user_id = @ownerId
+            """;
         cmd.Parameters.AddWithValue("@id", clientMessageId.ToString());
+        cmd.Parameters.AddWithValue("@ownerId", OwnerId);
         var count = (long)(await cmd.ExecuteScalarAsync(cancellationToken))!;
         return count > 0;
     }
@@ -99,16 +110,16 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
         CancellationToken ct = default)
     {
         await using var cmd = connection.CreateCommand();
-        // Guard: AND (plaintext_body IS NULL OR plaintext_body = '') prevents redundant FTS trigger
-        // churn on already-indexed rows (idempotency requirement from SRCH-01).
         cmd.CommandText = """
             UPDATE messages
             SET plaintext_body = @plaintext
             WHERE id = @id
+              AND owner_user_id = @ownerId
               AND (plaintext_body IS NULL OR plaintext_body = '')
             """;
         cmd.Parameters.AddWithValue("@plaintext", plaintextBody);
         cmd.Parameters.AddWithValue("@id", messageId.ToString());
+        cmd.Parameters.AddWithValue("@ownerId", OwnerId);
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
@@ -122,18 +133,18 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = """
             INSERT OR REPLACE INTO chats
-                (id, name, type, last_message_preview, unread_count, updated_at)
+                (id, owner_user_id, name, type, last_message_preview, unread_count, updated_at)
             VALUES
-                (@id, @name, @type, @lastMessagePreview, @unreadCount, @updatedAt)
+                (@id, @ownerId, @name, @type, @lastMessagePreview, @unreadCount, @updatedAt)
             """;
         cmd.Parameters.AddWithValue("@id", chat.Id.ToString());
+        cmd.Parameters.AddWithValue("@ownerId", OwnerId);
         cmd.Parameters.AddWithValue("@name", chat.Title);
         cmd.Parameters.AddWithValue("@type", (int)chat.Type);
         cmd.Parameters.AddWithValue(
             "@lastMessagePreview",
             (object?)chat.LastMessage?.EncryptedPayload ?? DBNull.Value);
         cmd.Parameters.AddWithValue("@unreadCount", chat.UnreadCount);
-        // ChatSummaryDto has no UpdatedAtUtc; use LastMessage time or current UTC
         var updatedAt = chat.LastMessage?.CreatedAtUtc ?? DateTimeOffset.UtcNow;
         cmd.Parameters.AddWithValue("@updatedAt", updatedAt.ToString("O"));
         await cmd.ExecuteNonQueryAsync(cancellationToken);
@@ -145,8 +156,13 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
         CancellationToken cancellationToken = default)
     {
         await using var cmd = connection.CreateCommand();
-        cmd.CommandText = "UPDATE chats SET unread_count = 0 WHERE id = @chatId";
+        cmd.CommandText = """
+            UPDATE chats SET unread_count = 0
+            WHERE id = @chatId
+              AND owner_user_id = @ownerId
+            """;
         cmd.Parameters.AddWithValue("@chatId", chatId.ToString());
+        cmd.Parameters.AddWithValue("@ownerId", OwnerId);
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -161,9 +177,11 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
             UPDATE messages
             SET status = @status
             WHERE client_message_id = @messageId
+              AND owner_user_id = @ownerId
             """;
         cmd.Parameters.AddWithValue("@status", (int)status);
         cmd.Parameters.AddWithValue("@messageId", messageId.ToString());
+        cmd.Parameters.AddWithValue("@ownerId", OwnerId);
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -179,11 +197,13 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
             SET status = @readStatus
             WHERE chat_id = @chatId
               AND sender_id = @senderId
+              AND owner_user_id = @ownerId
               AND status < @readStatus
             """;
         cmd.Parameters.AddWithValue("@readStatus", (int)MessageStatus.Read);
         cmd.Parameters.AddWithValue("@chatId", chatId.ToString());
         cmd.Parameters.AddWithValue("@senderId", currentUserId.ToString());
+        cmd.Parameters.AddWithValue("@ownerId", OwnerId);
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -195,8 +215,10 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
         cmd.CommandText = """
             SELECT id, name, type, last_message_preview, unread_count, updated_at
             FROM chats
+            WHERE owner_user_id = @ownerId
             ORDER BY updated_at DESC
             """;
+        cmd.Parameters.AddWithValue("@ownerId", OwnerId);
 
         var results = new List<ChatSummaryDto>();
         await using var reader = await cmd.ExecuteReaderAsync(cancellationToken);
@@ -208,7 +230,7 @@ public sealed class LocalMessageRepository(SqliteConnection connection) : ILocal
                 Type: (ChatType)reader.GetInt32(2),
                 AvatarUrl: null,
                 Description: null,
-                LastMessage: null,          // preview text stored separately; full message loaded on demand
+                LastMessage: null,
                 UnreadCount: reader.GetInt32(4),
                 Members: Array.Empty<ChatMemberDto>()));
         }

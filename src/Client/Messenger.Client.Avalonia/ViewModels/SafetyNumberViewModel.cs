@@ -8,6 +8,7 @@ public sealed partial class SafetyNumberViewModel : ViewModelBase
 {
     private readonly ISafetyNumberService _safetyNumberService;
     private readonly IRatchetSessionRepository _sessionRepo;
+    private readonly Action? _onVerified;
 
     private string _sessionId = string.Empty;
     private byte[]? _remoteIkPublic;
@@ -36,10 +37,12 @@ public sealed partial class SafetyNumberViewModel : ViewModelBase
     public SafetyNumberViewModel(
         ISafetyNumberService safetyNumberService,
         IRatchetSessionRepository sessionRepo,
-        Action closeOverlay)
+        Action closeOverlay,
+        Action? onVerified = null)
     {
         _safetyNumberService = safetyNumberService;
         _sessionRepo = sessionRepo;
+        _onVerified = onVerified;
 
         CloseCommand = new RelayCommand(closeOverlay);
         MarkAsVerifiedCommand = new AsyncRelayCommand(MarkAsVerifiedAsync, () => !IsVerified);
@@ -82,5 +85,6 @@ public sealed partial class SafetyNumberViewModel : ViewModelBase
         await _sessionRepo.SaveVerificationStateAsync(_sessionId, verified: true, now, _remoteIkPublic);
         IsVerified = true;
         VerifiedOnText = $"Verified on {DateTime.Now.ToShortDateString()}";
+        _onVerified?.Invoke();
     }
 }

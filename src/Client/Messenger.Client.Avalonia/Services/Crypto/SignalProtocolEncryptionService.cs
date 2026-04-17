@@ -32,15 +32,7 @@ public sealed class SignalProtocolEncryptionService(
     public async Task<EncryptedMessageDraft> EncryptTextAsync(
         string plaintext, Guid recipientUserId, CancellationToken cancellationToken = default)
     {
-        // 1. Fetch peer key bundle
-        var bundle = await apiClient.GetKeyBundleAsync(recipientUserId, cancellationToken);
-        if (bundle is null)
-        {
-            throw new InvalidOperationException(
-                "Could not establish a secure session. The recipient may not have published encryption keys yet.");
-        }
-
-        // 2. Session ID: "{localUserId}:{recipientUserId}" — stable per peer, device-agnostic for v1
+        // 1. Session ID: "{localUserId}:{recipientUserId}" — stable per peer, device-agnostic for v1
         var sessionId = $"{sessionService.CurrentUserId}:{recipientUserId}";
 
         var existingSession = await sessionManager.GetSessionAsync(sessionId, cancellationToken);
@@ -49,6 +41,16 @@ public sealed class SignalProtocolEncryptionService(
 
         if (existingSession is null)
         {
+            // 2. No existing session — fetch bundle and initiate X3DH.
+            //    Bundle is only needed for this initial handshake; subsequent messages
+            //    use the established Double Ratchet session without hitting the key server.
+            var bundle = await apiClient.GetKeyBundleAsync(recipientUserId, cancellationToken);
+            if (bundle is null)
+            {
+                throw new InvalidOperationException(
+                    "Could not establish a secure session. The recipient may not have published encryption keys yet.");
+            }
+
             // 3. Initiate X3DH
             var (sharedSecret, x3dhHeader) = x3dh.InitiateSession(
                 keyPublication.LocalBundle,
@@ -69,7 +71,7 @@ public sealed class SignalProtocolEncryptionService(
             });
         }
 
-        // 4. Double Ratchet encrypt
+        // 4. Double Ratchet encrypt (uses existing session — no bundle fetch needed here)
         var associatedData = Encoding.UTF8.GetBytes($"{sessionService.CurrentUserId}:{recipientUserId}");
         var (ciphertext, ratchetPub, pn, n) = await sessionManager.EncryptAsync(
             sessionId,

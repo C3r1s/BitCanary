@@ -4,26 +4,21 @@ namespace Messenger.Client.Avalonia.Services;
 
 /// <summary>
 /// FTS5-backed implementation of <see cref="ILocalSearchService"/>.
-/// Executes parameterised BM25-ranked MATCH queries against the <c>messages_fts</c>
-/// virtual table created by <see cref="DatabaseService.MigrateToV3Async"/>.
-///
-/// Constructor takes the shared <see cref="SqliteConnection"/> singleton (same
-/// connection used by <see cref="LocalMessageRepository"/> — SQLite WAL supports
-/// concurrent readers per Plan 03-03 decision).
+/// All results are scoped to <see cref="IClientSessionService.CurrentUserId"/>
+/// via the <c>owner_user_id</c> column (schema V5).
 /// </summary>
-public sealed class LocalSearchService(SqliteConnection connection) : ILocalSearchService
+public sealed class LocalSearchService(
+    SqliteConnection connection,
+    IClientSessionService sessionService) : ILocalSearchService
 {
     public async Task<IReadOnlyList<SearchResult>> SearchAsync(
         string query,
         Guid? chatId = null,
         CancellationToken cancellationToken = default)
     {
-        // Guard: empty / whitespace query — return immediately, no DB round-trip
         if (string.IsNullOrWhiteSpace(query))
             return Array.Empty<SearchResult>();
 
-        // Sanitise: strip FTS5 operator characters that could cause syntax errors,
-        // then split and rejoin to normalise whitespace (Pitfall 3 in RESEARCH.md).
         var sanitised = SanitiseFtsQuery(query);
         if (string.IsNullOrWhiteSpace(sanitised))
             return Array.Empty<SearchResult>();
@@ -36,13 +31,15 @@ public sealed class LocalSearchService(SqliteConnection connection) : ILocalSear
                        snippet(messages_fts, 0, '[', ']', '...', 20)
                 FROM messages_fts
                 JOIN messages m ON m.rowid = messages_fts.rowid
-                JOIN chats c ON c.id = m.chat_id
+                JOIN chats c ON c.id = m.chat_id AND c.owner_user_id = @ownerId
                 WHERE messages_fts MATCH @query
+                  AND m.owner_user_id = @ownerId
                   AND (@chatId IS NULL OR m.chat_id = @chatId)
                 ORDER BY bm25(messages_fts)
                 LIMIT 50
                 """;
             cmd.Parameters.AddWithValue("@query", sanitised);
+            cmd.Parameters.AddWithValue("@ownerId", sessionService.CurrentUserId.ToString());
             cmd.Parameters.AddWithValue("@chatId", chatId.HasValue ? chatId.Value.ToString() : (object)DBNull.Value);
 
             var results = new List<SearchResult>();
@@ -53,7 +50,7 @@ public sealed class LocalSearchService(SqliteConnection connection) : ILocalSear
                     MessageId: Guid.Parse(reader.GetString(0)),
                     ChatId: Guid.Parse(reader.GetString(1)),
                     ChatName: reader.GetString(2),
-                    SenderDisplayName: reader.GetString(3),    // sender_id used as fallback
+                    SenderDisplayName: reader.GetString(3),
                     SentAt: DateTimeOffset.Parse(
                         reader.GetString(4),
                         null,
@@ -65,19 +62,12 @@ public sealed class LocalSearchService(SqliteConnection connection) : ILocalSear
         }
         catch (SqliteException)
         {
-            // If sanitisation didn't fully neutralise a malformed query, swallow the
-            // FTS5 syntax error and return empty rather than surfacing a crash (Pitfall 4).
             return Array.Empty<SearchResult>();
         }
     }
 
-    /// <summary>
-    /// Strips FTS5 operator characters that could cause syntax errors, splits on
-    /// whitespace, and rejoins with spaces. Returns an empty string if nothing remains.
-    /// </summary>
     private static string SanitiseFtsQuery(string raw)
     {
-        // Strip characters that have special meaning in FTS5 syntax
         var cleaned = raw
             .Replace("\"", " ")
             .Replace("*", " ")
@@ -85,7 +75,6 @@ public sealed class LocalSearchService(SqliteConnection connection) : ILocalSear
             .Replace(")", " ")
             .Replace("-", " ");
 
-        // Split on whitespace, filter empty tokens, rejoin
         var tokens = cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return string.Join(' ', tokens);
     }

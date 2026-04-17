@@ -47,9 +47,13 @@ public static class ServiceCollectionExtensions
                        .GetAwaiter().GetResult();
         });
         services.AddSingleton<ILocalMessageRepository>(sp =>
-            new LocalMessageRepository(sp.GetRequiredService<SqliteConnection>()));
+            new LocalMessageRepository(
+                sp.GetRequiredService<SqliteConnection>(),
+                sp.GetRequiredService<IClientSessionService>()));
         services.AddSingleton<ILocalSearchService>(sp =>
-            new LocalSearchService(sp.GetRequiredService<SqliteConnection>()));
+            new LocalSearchService(
+                sp.GetRequiredService<SqliteConnection>(),
+                sp.GetRequiredService<IClientSessionService>()));
         services.AddSingleton<IRatchetSessionRepository>(sp =>
             new RatchetSessionRepository(sp.GetRequiredService<SqliteConnection>()));
 

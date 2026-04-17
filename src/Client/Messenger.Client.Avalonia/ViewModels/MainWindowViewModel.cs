@@ -51,6 +51,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private bool _isMigrating;
 
     [ObservableProperty]
+    private bool _isShowingDebugError;
+
+    [ObservableProperty]
+    private string _debugErrorText = string.Empty;
+
+    [RelayCommand]
+    private void CloseDebugError() => IsShowingDebugError = false;
+
+    [ObservableProperty]
     private bool _isShowingSafetyNumber;
 
     [ObservableProperty]
@@ -198,7 +207,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         SafetyNumber = new SafetyNumberViewModel(
             _safetyNumberService,
             _sessionRepository,
-            () => IsShowingSafetyNumber = false);
+            () => IsShowingSafetyNumber = false,
+            () => ChatWindow.IsSessionVerified = true);
 
         ChatList = new ChatListViewModel(RefreshRemoteDataAsync);
 
@@ -244,7 +254,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             (chatId, req) => _apiClient.UpdateChatAsync(chatId, req),
             () => ChatWindow.IsGroupInfoVisible = false);
         ChatWindow.GroupInfo = groupInfoVm;
-        ChatWindow.ShowGroupInfoCommand = new RelayCommand(() => ChatWindow.IsGroupInfoVisible = true);
+        ChatWindow.ShowGroupInfoCommand = new RelayCommand(() => ChatWindow.IsGroupInfoVisible = !ChatWindow.IsGroupInfoVisible);
         ChatWindow.CloseGroupInfoCommand = new RelayCommand(() => ChatWindow.IsGroupInfoVisible = false);
 
         MessageInput = new MessageInputViewModel(
@@ -282,6 +292,20 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _realtimeClient.ConnectionStateChanged += state => ConnectionState = state;
 
         changeDetector.IdentityKeyChanged += HandleIdentityKeyChangedAsync;
+    }
+
+    private void ShowDebugError(string context, Exception ex)
+    {
+        DebugErrorText =
+            $"Context : {context}\n" +
+            $"Type    : {ex.GetType().FullName}\n" +
+            $"Message : {ex.Message}\n\n" +
+            $"--- Inner Exception ---\n" +
+            (ex.InnerException is not null
+                ? $"{ex.InnerException.GetType().FullName}: {ex.InnerException.Message}\n\n"
+                : "(none)\n\n") +
+            $"--- Stack Trace ---\n{ex.StackTrace}";
+        IsShowingDebugError = true;
     }
 
     private void NavigateToSearchResult(SearchResultItemViewModel result)
@@ -381,13 +405,23 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void Logout()
     {
+        // Capture userId before ClearSession() zeroes it — needed for user-scoped cache invalidation.
+        var userId = _sessionService.CurrentUserId;
         _sessionService.ClearSession();
+
+        // Clear all in-memory state so no previous user's data leaks into the next session.
+        ChatList.SelectedChat = null;          // must be nulled explicitly — Chats.Clear() does not reset this
         ChatList.Chats.Clear();
+        ChatList.IsSearchMode = false;
+        ChatList.IsUserSearchMode = false;
+        ChatList.IsGroupCreationMode = false;
         ChatWindow.Messages.Clear();
+        ChatWindow.IsGroupInfoVisible = false;
         _messageCache.Clear();
         _chatSummaryCache.Clear();
-        // Invalidate the local chats cache so a subsequent login never loads the previous user's chats.
-        _ = _localCacheService.SaveAsync("chats", Array.Empty<ChatSummaryDto>());
+
+        // Invalidate the user-scoped chats cache so a subsequent login (any user) loads fresh data.
+        _ = _localCacheService.SaveAsync(ChatsKey(userId), Array.Empty<ChatSummaryDto>());
         IsLoggedIn = false;
         CurrentUsername = string.Empty;
         StatusMessage = "Loading local cache...";
@@ -559,11 +593,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             var chats = await _apiClient.GetChatsAsync();
             await ApplyChatSummariesAsync(chats);
-            await _localCacheService.SaveAsync("chats", chats);
+            await _localCacheService.SaveAsync(ChatsKey(), chats);
 
             var settings = await _apiClient.GetSettingsAsync();
             ApplySettings(settings);
-            await _localCacheService.SaveAsync("settings", settings);
+            await _localCacheService.SaveAsync(SettingsKey(), settings);
 
             StatusMessage = $"Synced {chats.Count} chats.";
 
@@ -693,6 +727,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 // Server unreachable or network error — show cached messages and continue (D-11)
                 StatusMessage = $"{selectedChat.Title} (offline — showing cached messages)";
             }
+            catch (Microsoft.AspNetCore.SignalR.HubException ex)
+            {
+                // JoinChat hub call rejected (e.g. server-side membership race on a newly created chat).
+                // Messages were already loaded above; chat remains usable, just without real-time join ack.
+                StatusMessage = $"{selectedChat.Title} ready (sync issue: {ex.Message})";
+            }
         }
         else
         {
@@ -811,6 +851,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             // Remove tracking entry — server confirmed
             _outgoingVmByClientId.Remove(clientMessageId);
 
+            // Replace the optimistic "Sending" VM with the server-confirmed one.
+            // Without this, the sending bubble stays alongside the real confirmed message.
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                if (ChatList.SelectedChat?.Id == selectedChat.Id)
+                    ChatWindow.Messages.Remove(optimisticVm);
+            });
+
             // D-08: Only persist server-confirmed messages to SQLite
             await AppendMessageAsync(message);
             await PersistMessagesAsync(selectedChat.Id);
@@ -818,15 +866,22 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex) when (ex is HttpRequestException
                                        or OperationCanceledException
                                        or TaskCanceledException
-                                       or InvalidOperationException)
+                                       or InvalidOperationException
+                                       or System.Security.Cryptography.CryptographicException)
         {
-            // D-04/D-05: Mark the in-flight VM as failed — covers network errors and
-            // encryption failures (e.g. recipient has not published keys yet)
+            // D-04/D-05: Mark the in-flight VM as failed — covers network errors,
+            // encryption failures (e.g. recipient has not published keys yet),
+            // and ratchet session errors (CryptographicException from SessionManager).
             _outgoingVmByClientId.Remove(clientMessageId);
             System.Diagnostics.Debug.WriteLine($"[SendMessageAsync] Failed: {ex.GetType().Name}: {ex.Message}");
+            var userMessage = ex is InvalidOperationException
+                ? "Send failed: recipient has no encryption keys. Ask them to open the app."
+                : "Message failed to send. Check your connection and try again.";
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 optimisticVm.Status = MessageStatus.Failed;
+                StatusMessage = userMessage;
+                ShowDebugError("SendMessageAsync", ex);
             });
         }
     }
@@ -868,6 +923,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 ProtocolVersion.SignalProtocol);
 
             var message = await _apiClient.SendMessageAsync(request);
+
+            // Remove the stale optimistic VM before adding the server-confirmed one.
+            // Without this, the failed bubble stays on screen as a ghost alongside the real message.
+            await Dispatcher.UIThread.InvokeAsync(() => ChatWindow.Messages.Remove(vm));
+
             // Success — persist server-confirmed message
             await AppendMessageAsync(message);
             await PersistMessagesAsync(selectedChat.Id);
@@ -875,14 +935,20 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex) when (ex is HttpRequestException
                                        or OperationCanceledException
                                        or TaskCanceledException
-                                       or InvalidOperationException)
+                                       or InvalidOperationException
+                                       or System.Security.Cryptography.CryptographicException)
         {
-            // Covers network errors and encryption failures (e.g. recipient has not published keys yet).
+            // Covers network errors, encryption failures, and ratchet session errors.
             // Revert VM status to Failed so the retry button remains visible.
             System.Diagnostics.Debug.WriteLine($"[RetryMessageAsync] Failed: {ex.GetType().Name}: {ex.Message}");
+            var userMessage = ex is InvalidOperationException
+                ? "Send failed: recipient has no encryption keys. Ask them to open the app."
+                : "Message failed to send. Check your connection and try again.";
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 vm.Status = MessageStatus.Failed;
+                StatusMessage = userMessage;
+                ShowDebugError("RetryMessageAsync", ex);
             });
         }
     }
@@ -914,7 +980,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             await _apiClient.UpdateSettingsAsync(settings);
         }
 
-        await _localCacheService.SaveAsync("settings", new UserSettingsDto(
+        await _localCacheService.SaveAsync(SettingsKey(), new UserSettingsDto(
             themePreference,
             Settings.SendByEnter,
             Settings.UseCompactMode,
@@ -1005,7 +1071,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private async Task LoadCachedSettingsAsync()
     {
-        var settings = await _localCacheService.LoadAsync<UserSettingsDto>("settings");
+        var settings = await _localCacheService.LoadAsync<UserSettingsDto>(SettingsKey());
         if (settings is not null)
         {
             ApplySettings(settings);
@@ -1014,7 +1080,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private async Task LoadCachedChatsAsync()
     {
-        var chats = await _localCacheService.LoadAsync<IReadOnlyCollection<ChatSummaryDto>>("chats");
+        var chats = await _localCacheService.LoadAsync<IReadOnlyCollection<ChatSummaryDto>>(ChatsKey());
         if (chats is not null)
         {
             await ApplyChatSummariesAsync(chats);
@@ -1189,5 +1255,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         return _localCacheService.SaveAsync(GetMessageCacheKey(chatId), messages);
     }
 
-    private static string GetMessageCacheKey(Guid chatId) => $"messages-{chatId:N}";
+    private string GetMessageCacheKey(Guid chatId) =>
+        $"messages-{_sessionService.CurrentUserId:N}-{chatId:N}";
+
+    private string ChatsKey() => ChatsKey(_sessionService.CurrentUserId);
+    private static string ChatsKey(Guid userId) => $"chats-{userId:N}";
+
+    private string SettingsKey() => $"settings-{_sessionService.CurrentUserId:N}";
 }

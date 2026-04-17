@@ -176,5 +176,63 @@
       </Grid>
     </Grid>
 
+    <!-- ═══════════════════════════════════════════════════════════
+         DEBUG ERROR OVERLAY  (temporary — remove when done)
+    ═══════════════════════════════════════════════════════════════ -->
+    <Grid IsVisible="{Binding IsShowingDebugError}"
+          Background="#CC000000"
+          ZIndex="200">
+      <Border MaxWidth="700" MaxHeight="520"
+              VerticalAlignment="Center" HorizontalAlignment="Center"
+              Background="#0E0E0E" BorderBrush="#E05050" BorderThickness="1"
+              Padding="0">
+        <Grid RowDefinitions="Auto,*,Auto">
+
+          <!-- Title bar -->
+          <Border Grid.Row="0"
+                  Background="#1A0505"
+                  BorderBrush="#E05050" BorderThickness="0,0,0,1"
+                  Padding="14,8">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Text="[ DEBUG ] Send Error"
+                         FontSize="13" FontWeight="Bold"
+                         Foreground="#E05050"
+                         VerticalAlignment="Center" />
+              <Button Grid.Column="1"
+                      Content="[X]"
+                      Command="{Binding CloseDebugErrorCommand}"
+                      Background="Transparent"
+                      Foreground="#E05050"
+                      Padding="8,4" FontSize="12" />
+            </Grid>
+          </Border>
+
+          <!-- Scrollable error detail -->
+          <ScrollViewer Grid.Row="1" Padding="14,10">
+            <TextBlock Text="{Binding DebugErrorText}"
+                       FontSize="11"
+                       FontFamily="Consolas,Courier New,monospace"
+                       Foreground="#C8C8C8"
+                       TextWrapping="Wrap" />
+          </ScrollViewer>
+
+          <!-- Footer -->
+          <Border Grid.Row="2"
+                  Background="#0A0A0A"
+                  BorderBrush="#2A2A2A" BorderThickness="0,1,0,0"
+                  Padding="14,8">
+            <Button Content="[ CLOSE ]"
+                    Command="{Binding CloseDebugErrorCommand}"
+                    HorizontalAlignment="Right"
+                    Background="Transparent"
+                    Foreground="#C8C8C8"
+                    BorderBrush="#404040" BorderThickness="1"
+                    Padding="10,4" FontSize="12" />
+          </Border>
+
+        </Grid>
+      </Border>
+    </Grid>
+
   </Panel>
 </Window>

@@ -123,7 +123,7 @@
                         Classes.highlighted="{Binding IsHighlighted}"
                         IsVisible="{Binding !IsSystemBanner}"
                         Padding="14,2">
-                  <Grid ColumnDefinitions="50,100,*,18" ColumnSpacing="6">
+                  <Grid ColumnDefinitions="50,100,*,Auto" ColumnSpacing="6">
 
                     <!-- [HH:MM] timestamp -->
                     <TextBlock Grid.Column="0"

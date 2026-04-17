@@ -405,6 +405,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void Logout()
     {
+        // FIX-04: dismiss Settings modal before tearing down session so it cannot bleed onto the login screen.
+        IsShowingSettings = false;
+
         // Capture userId before ClearSession() zeroes it — needed for user-scoped cache invalidation.
         var userId = _sessionService.CurrentUserId;
         _sessionService.ClearSession();

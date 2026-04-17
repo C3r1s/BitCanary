@@ -192,4 +192,80 @@ public sealed class GroupInfoViewModelTests
         // Assert
         Assert.True(item.CanRevokeAdmin);
     }
+
+    // ── FIX-05: RemoveMember removes from ObservableCollection on success ───
+
+    [Fact]
+    public async Task RemoveMember_WhenSucceedsAndNotSelf_RemovesMemberFromMembersCollection()
+    {
+        // Arrange: current user is Owner, target is a different Member
+        var currentUserId = Guid.NewGuid();
+        var targetUserId = Guid.NewGuid();
+        var members = new[]
+        {
+            MakeMember(currentUserId, ChatRole.Owner, "Owner"),
+            MakeMember(targetUserId, ChatRole.Member, "Target"),
+        };
+        var summary = MakeSummary(members);
+
+        var removeCalls = 0;
+        var closeCalls = 0;
+        var vm = new GroupInfoViewModel(
+            (_, _) => Task.FromResult(MakeSummary(Array.Empty<ChatMemberDto>())),
+            (_, _) => { removeCalls++; return Task.CompletedTask; },
+            (_, _, _) => Task.CompletedTask,
+            (_, _) => Task.FromResult(MakeSummary(Array.Empty<ChatMemberDto>())),
+            () => { closeCalls++; });
+
+        await vm.LoadAsync(summary, currentUserId);
+        Assert.Equal(2, vm.Members.Count);
+
+        var targetItem = vm.Members.First(m => m.UserId == targetUserId);
+
+        // Act: invoke the target member's RemoveCommand (wired to RemoveMemberAndReloadAsync via callerRole=Owner, targetRole=Member → CanRemove=true)
+        Assert.True(targetItem.RemoveCommand.CanExecute(null));
+        await targetItem.RemoveCommand.ExecuteAsync(null);
+
+        // Assert
+        Assert.Equal(1, removeCalls);
+        Assert.Equal(0, closeCalls);                                    // not self — must NOT close
+        Assert.Equal(1, vm.Members.Count);                              // member removed from UI collection
+        Assert.DoesNotContain(vm.Members, m => m.UserId == targetUserId);
+        Assert.Contains(vm.Members, m => m.UserId == currentUserId);    // caller still present
+    }
+
+    [Fact]
+    public async Task RemoveMember_WhenSucceedsAndIsSelf_FiresCloseActionAndDoesNotTouchCollection()
+    {
+        // Arrange: current user removes self via LeaveCommand (CanLeave=true for non-Owner members)
+        var currentUserId = Guid.NewGuid();
+        var otherUserId = Guid.NewGuid();
+        var members = new[]
+        {
+            MakeMember(currentUserId, ChatRole.Member, "Self"),
+            MakeMember(otherUserId, ChatRole.Owner, "Other"),
+        };
+        var summary = MakeSummary(members);
+
+        var closeCalls = 0;
+        var vm = new GroupInfoViewModel(
+            (_, _) => Task.FromResult(MakeSummary(Array.Empty<ChatMemberDto>())),
+            (_, _) => Task.CompletedTask,
+            (_, _, _) => Task.CompletedTask,
+            (_, _) => Task.FromResult(MakeSummary(Array.Empty<ChatMemberDto>())),
+            () => { closeCalls++; });
+
+        await vm.LoadAsync(summary, currentUserId);
+        var selfItem = vm.Members.First(m => m.UserId == currentUserId);
+
+        // Act: invoke self's LeaveCommand (wired to RemoveMemberAndReloadAsync with wasCurrentUser=true)
+        Assert.True(selfItem.LeaveCommand.CanExecute(null));
+        await selfItem.LeaveCommand.ExecuteAsync(null);
+
+        // Assert: close action fired; collection left intact for the caller (panel will close)
+        Assert.Equal(1, closeCalls);
+        // When wasCurrentUser is true we do NOT mutate Members (per D-10)
+        Assert.Equal(2, vm.Members.Count);
+        Assert.Contains(vm.Members, m => m.UserId == currentUserId);
+    }
 }

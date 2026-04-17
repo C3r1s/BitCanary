@@ -150,6 +150,44 @@ public sealed class KeyBundleServiceTests
     }
 
     [Fact]
+    public async Task GetBundle_MultipleDevices_ReturnsMostRecentBundle()
+    {
+        var (db, validator, notifier) = CreateDeps();
+        var svc = CreateService(db, validator, notifier);
+        var userId = Guid.NewGuid();
+
+        // Seed an older bundle
+        var older = new UserKeyBundle
+        {
+            UserId = userId,
+            DeviceId = Guid.NewGuid(),
+            IkPublic = [1, 2, 3],
+            SpkPublic = [4, 5, 6],
+            SpkSignature = [7, 8, 9],
+            SpkCreatedAt = DateTimeOffset.UtcNow.AddDays(-1)
+        };
+        db.UserKeyBundles.Add(older);
+
+        // Seed a newer bundle (same userId, different DeviceId)
+        var newer = new UserKeyBundle
+        {
+            UserId = userId,
+            DeviceId = Guid.NewGuid(),
+            IkPublic = [10, 11, 12],
+            SpkPublic = [13, 14, 15],
+            SpkSignature = [16, 17, 18],
+            SpkCreatedAt = DateTimeOffset.UtcNow
+        };
+        db.UserKeyBundles.Add(newer);
+        db.SaveChanges();
+
+        var result = await svc.GetBundleAsync(userId, CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Equal(newer.DeviceId, result.DeviceId);
+    }
+
+    [Fact]
     public async Task ReplenishOpks_AddsKeysToPool()
     {
         var (db, validator, notifier) = CreateDeps();

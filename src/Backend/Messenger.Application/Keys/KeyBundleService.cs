@@ -57,9 +57,14 @@ public sealed class KeyBundleService(
 
     public async Task<KeyBundleDto?> GetBundleAsync(Guid userId, CancellationToken cancellationToken)
     {
+        // FIX-02: select the most-recently-published bundle when a user has multiple devices.
+        // Multi-device users legitimately have multiple rows (unique index is (UserId, DeviceId));
+        // previous SingleOrDefaultAsync threw InvalidOperationException → HTTP 500.
         var bundle = await dbContext.UserKeyBundles
             .AsNoTracking()
-            .SingleOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+            .Where(x => x.UserId == userId)
+            .OrderByDescending(x => x.SpkCreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (bundle is null)
             return null;

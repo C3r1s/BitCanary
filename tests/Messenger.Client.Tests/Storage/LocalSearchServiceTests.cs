@@ -6,6 +6,18 @@ using Xunit;
 
 namespace Messenger.Client.Tests.Storage;
 
+// Minimal stub for IClientSessionService used in search tests.
+file sealed class StubSessionServiceForSearch : IClientSessionService
+{
+    public string ApiBaseUrl => string.Empty;
+    public string? AccessToken => null;
+    public Guid CurrentUserId { get; } = Guid.NewGuid();
+    public string UserName => "test";
+    public bool IsAuthenticated => true;
+    public void SetSession(Guid userId, string userName, string accessToken) { }
+    public void ClearSession() { }
+}
+
 [Trait("Category", "Unit")]
 public sealed class LocalSearchServiceTests : IAsyncDisposable
 {
@@ -17,7 +29,7 @@ public sealed class LocalSearchServiceTests : IAsyncDisposable
         _conn = new SqliteConnection("Data Source=:memory:");
         _conn.Open();
         DatabaseService.ApplySchemaForTestAsync(_conn).GetAwaiter().GetResult();
-        _search = new LocalSearchService(_conn);
+        _search = new LocalSearchService(_conn, new StubSessionServiceForSearch());
     }
 
     public async ValueTask DisposeAsync()

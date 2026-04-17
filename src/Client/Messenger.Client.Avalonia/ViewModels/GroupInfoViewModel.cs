@@ -140,7 +140,19 @@ public sealed partial class GroupInfoViewModel : ViewModelBase
             // After leaving, close the panel (caller was removed or left)
             var wasCurrentUser = userId == _currentUserId;
             // Signal that a reload is needed by closing the panel on leave
-            if (wasCurrentUser) _closeAction();
+            if (wasCurrentUser)
+            {
+                _closeAction();
+            }
+            else
+            {
+                // FIX-05: remove the member from the observable collection so the UI reflects the removal immediately.
+                var item = Members.FirstOrDefault(m => m.UserId == userId);
+                if (item is not null)
+                {
+                    Members.Remove(item);
+                }
+            }
         }
         catch (Exception ex)
         {

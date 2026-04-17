@@ -1151,7 +1151,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ChatList.Chats.Add(new ChatListItemViewModel
             {
                 Id = chat.Id,
-                Title = chat.Title,
+                Title = chat.Type == Messenger.Shared.Contracts.ChatType.Direct
+                    ? (string.IsNullOrEmpty(peer?.DisplayName) ? chat.Title : peer.DisplayName)
+                    : chat.Title,
                 Type = chat.Type,
                 PeerUserId = peer?.UserId ?? Guid.Empty,
                 MemberCount = chat.Members?.Count ?? 0,

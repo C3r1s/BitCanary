@@ -7,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
-builder.Services.AddMessengerApi(builder.Configuration);
+builder.Services.AddMessengerApi(builder.Configuration, builder.Environment);
 
 var app = builder.Build();
 

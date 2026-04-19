@@ -2,6 +2,7 @@ using Messenger.Application.Abstractions;
 using Messenger.Shared.Contracts.Dtos;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Messenger.Api.Controllers;
 
@@ -15,6 +16,7 @@ public sealed class AuthController(IAuthService authService) : ControllerBase
         authService.RegisterAsync(request, cancellationToken);
 
     [HttpPost("login")]
+    [EnableRateLimiting("login")]
     public Task<AuthResponse> Login(LoginRequest request, CancellationToken cancellationToken) =>
         authService.LoginAsync(request, cancellationToken);
 }

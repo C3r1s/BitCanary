@@ -21,6 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\Backend\Messenger.Api\Messenger.Api.csproj" />
     <ProjectReference Include="..\..\src\Backend\Messenger.Application\Messenger.Application.csproj" />
     <ProjectReference Include="..\..\src\Backend\Messenger.Domain\Messenger.Domain.csproj" />
     <ProjectReference Include="..\..\src\Backend\Messenger.Infrastructure\Messenger.Infrastructure.csproj" />

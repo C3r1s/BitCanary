@@ -13,5 +13,6 @@
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="..\tests\Messenger.Client.Tests\Messenger.Client.Tests.csproj" />
+    <Project Path="Backend/Messenger.Tests/Messenger.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,31 +1,31 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <Nullable>enable</Nullable>
-    <IsPackable>false</IsPackable>
-  </PropertyGroup>
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <IsPackable>false</IsPackable>
+    </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="coverlet.collector" Version="6.0.4" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.0-preview.4.25258.110" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
-    <PackageReference Include="NSubstitute" Version="5.3.0" />
-    <PackageReference Include="xunit" Version="2.9.3" />
-    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
-  </ItemGroup>
+    <ItemGroup>
+        <PackageReference Include="coverlet.collector" Version="6.0.4"/>
+        <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.0-preview.4.25258.110"/>
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1"/>
+        <PackageReference Include="NSubstitute" Version="5.3.0"/>
+        <PackageReference Include="xunit" Version="2.9.3"/>
+        <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <Using Include="Xunit" />
-  </ItemGroup>
+    <ItemGroup>
+        <Using Include="Xunit"/>
+    </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\..\src\Backend\Messenger.Api\Messenger.Api.csproj" />
-    <ProjectReference Include="..\..\src\Backend\Messenger.Application\Messenger.Application.csproj" />
-    <ProjectReference Include="..\..\src\Backend\Messenger.Domain\Messenger.Domain.csproj" />
-    <ProjectReference Include="..\..\src\Backend\Messenger.Infrastructure\Messenger.Infrastructure.csproj" />
-    <ProjectReference Include="..\..\src\Shared\Messenger.Shared.Contracts\Messenger.Shared.Contracts.csproj" />
-  </ItemGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\src\Backend\Messenger.Api\Messenger.Api.csproj"/>
+        <ProjectReference Include="..\..\src\Backend\Messenger.Application\Messenger.Application.csproj"/>
+        <ProjectReference Include="..\..\src\Backend\Messenger.Domain\Messenger.Domain.csproj"/>
+        <ProjectReference Include="..\..\src\Backend\Messenger.Infrastructure\Messenger.Infrastructure.csproj"/>
+        <ProjectReference Include="..\..\src\Shared\Messenger.Shared.Contracts\Messenger.Shared.Contracts.csproj"/>
+    </ItemGroup>
 
 </Project>

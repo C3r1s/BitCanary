@@ -33,7 +33,7 @@ public sealed class ClientSessionService : IClientSessionService
 
         var apiBaseUrl = Environment.GetEnvironmentVariable("MESSENGER_API_BASE_URL");
         ApiBaseUrl = string.IsNullOrWhiteSpace(apiBaseUrl)
-            ? "http://localhost:5176"   // matches launchSettings.json http profile
+            ? "http://localhost:5000"   // matches launchSettings.json http profile
             : apiBaseUrl.TrimEnd('/');
 
         // Environment variables take precedence (CI / docker injection) — unchanged by SEC-01.

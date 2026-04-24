@@ -21,7 +21,8 @@ public sealed class JwtStartupGuardTests
         var values = new Dictionary<string, string?>
         {
             // Minimal values to prevent AddMessengerInfrastructure from crashing on missing config
-            ["ConnectionStrings:Postgres"] = "Host=localhost;Port=5432;Database=test;Username=postgres;Password=postgres",
+            ["ConnectionStrings:Postgres"] =
+                "Host=localhost;Port=5432;Database=test;Username=postgres;Password=postgres",
             ["Jwt:Issuer"] = "TestIssuer",
             ["Jwt:Audience"] = "TestAudience",
             ["Storage:RootPath"] = "storage"
@@ -39,7 +40,7 @@ public sealed class JwtStartupGuardTests
     {
         var services = new ServiceCollection();
         var env = CreateEnvironment("Production");
-        var config = BuildConfig(signingKey: null);  // No key set — defaults to string.Empty
+        var config = BuildConfig(signingKey: null); // No key set — defaults to string.Empty
 
         var ex = Assert.Throws<InvalidOperationException>(() =>
             services.AddMessengerApi(config, env));

@@ -17,7 +17,8 @@ public sealed class RatchetSessionRepository(SqliteConnection connection) : IRat
         var result = await cmd.ExecuteScalarAsync(ct);
         if (result is null || result == DBNull.Value)
             return null;
-        return (byte[])result;
+        var blob = (byte[])result;
+        return blob.Length == 0 ? null : blob;
     }
 
     /// <inheritdoc/>

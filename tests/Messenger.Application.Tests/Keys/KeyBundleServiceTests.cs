@@ -52,6 +52,7 @@ public sealed class KeyBundleServiceTests
                 PublicKey = [(byte)(i + 1), (byte)(i + 2)]
             });
         }
+
         db.SaveChanges();
     }
 

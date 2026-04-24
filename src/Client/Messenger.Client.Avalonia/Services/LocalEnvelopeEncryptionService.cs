@@ -11,10 +11,6 @@ public sealed class LocalEnvelopeEncryptionService(IKeyStore keyStore, ILocalCac
     private const string EnvelopeCacheKey = "encryption-keyring-dpapi";
     private Dictionary<string, string>? _keyRing;
 
-    /// <summary>
-    /// Encrypts using local AES-256-GCM envelope scheme.
-    /// recipientUserId is ignored — legacy path does not use it.
-    /// </summary>
     public async Task<EncryptedMessageDraft> EncryptTextAsync(string plaintext, Guid recipientUserId, CancellationToken cancellationToken = default)
     {
         await EnsureLoadedAsync(cancellationToken);
@@ -47,11 +43,7 @@ public sealed class LocalEnvelopeEncryptionService(IKeyStore keyStore, ILocalCac
             envelopeId,
             null);
     }
-
-    /// <summary>
-    /// Decrypts a legacy AES-256-GCM envelope message.
-    /// Returns "[Encrypted message]" if the key is not found or decryption fails.
-    /// </summary>
+    
     public Task<string> DecryptAsync(MessageDto message, CancellationToken cancellationToken = default)
     {
         EnsureLoadedAsync(CancellationToken.None).GetAwaiter().GetResult();

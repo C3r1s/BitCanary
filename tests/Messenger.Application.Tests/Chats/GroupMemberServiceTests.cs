@@ -39,9 +39,12 @@ public sealed class GroupMemberServiceTests
         var adminId = Guid.NewGuid();
         var memberId = Guid.NewGuid();
 
-        var owner = new User { Id = ownerId, UserName = "owner", DisplayName = "Owner", PasswordHash = "x", PublicKey = "k" };
-        var admin = new User { Id = adminId, UserName = "admin", DisplayName = "Admin", PasswordHash = "x", PublicKey = "k" };
-        var member = new User { Id = memberId, UserName = "member", DisplayName = "Member", PasswordHash = "x", PublicKey = "k" };
+        var owner = new User
+            { Id = ownerId, UserName = "owner", DisplayName = "Owner", PasswordHash = "x", PublicKey = "k" };
+        var admin = new User
+            { Id = adminId, UserName = "admin", DisplayName = "Admin", PasswordHash = "x", PublicKey = "k" };
+        var member = new User
+            { Id = memberId, UserName = "member", DisplayName = "Member", PasswordHash = "x", PublicKey = "k" };
         db.Users.AddRange(owner, admin, member);
 
         var chat = new Chat { Title = "Test Group", Type = ChatType.Group };
@@ -63,13 +66,14 @@ public sealed class GroupMemberServiceTests
     public async Task AddMember_MemberRole_ThrowsForbidden()
     {
         var (db, chatId, _, _, memberId) = SeedGroupChat();
-        var newUser = new User { Id = Guid.NewGuid(), UserName = "newuser", DisplayName = "New", PasswordHash = "x", PublicKey = "k" };
+        var newUser = new User
+            { Id = Guid.NewGuid(), UserName = "newuser", DisplayName = "New", PasswordHash = "x", PublicKey = "k" };
         db.Users.Add(newUser);
         await db.SaveChangesAsync();
 
         var svc = CreateService(db, CreateCurrentUser(memberId));
-        var ex = await Assert.ThrowsAsync<AppException>(
-            () => svc.AddMemberAsync(chatId, newUser.Id, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<AppException>(() =>
+            svc.AddMemberAsync(chatId, newUser.Id, CancellationToken.None));
 
         Assert.Equal(HttpStatusCode.Forbidden, ex.StatusCode);
     }
@@ -80,8 +84,8 @@ public sealed class GroupMemberServiceTests
         var (db, chatId, _, adminId, memberId) = SeedGroupChat();
         var svc = CreateService(db, CreateCurrentUser(adminId));
 
-        var ex = await Assert.ThrowsAsync<AppException>(
-            () => svc.AddMemberAsync(chatId, memberId, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<AppException>(() =>
+            svc.AddMemberAsync(chatId, memberId, CancellationToken.None));
 
         Assert.Equal(HttpStatusCode.Conflict, ex.StatusCode);
     }
@@ -93,14 +97,15 @@ public sealed class GroupMemberServiceTests
 
         // Add a second admin to remove
         var secondAdminId = Guid.NewGuid();
-        var secondAdmin = new User { Id = secondAdminId, UserName = "admin2", DisplayName = "Admin2", PasswordHash = "x", PublicKey = "k" };
+        var secondAdmin = new User
+            { Id = secondAdminId, UserName = "admin2", DisplayName = "Admin2", PasswordHash = "x", PublicKey = "k" };
         db.Users.Add(secondAdmin);
         db.ChatMemberships.Add(new ChatMembership { ChatId = chatId, UserId = secondAdminId, Role = ChatRole.Admin });
         await db.SaveChangesAsync();
 
         var svc = CreateService(db, CreateCurrentUser(adminId));
-        var ex = await Assert.ThrowsAsync<AppException>(
-            () => svc.RemoveMemberAsync(chatId, secondAdminId, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<AppException>(() =>
+            svc.RemoveMemberAsync(chatId, secondAdminId, CancellationToken.None));
 
         Assert.Equal(HttpStatusCode.Forbidden, ex.StatusCode);
     }
@@ -123,8 +128,8 @@ public sealed class GroupMemberServiceTests
         var (db, chatId, ownerId, _, _) = SeedGroupChat();
         var svc = CreateService(db, CreateCurrentUser(ownerId));
 
-        var ex = await Assert.ThrowsAsync<AppException>(
-            () => svc.RemoveMemberAsync(chatId, ownerId, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<AppException>(() =>
+            svc.RemoveMemberAsync(chatId, ownerId, CancellationToken.None));
 
         Assert.Equal(HttpStatusCode.BadRequest, ex.StatusCode);
     }
@@ -135,8 +140,8 @@ public sealed class GroupMemberServiceTests
         var (db, chatId, _, adminId, memberId) = SeedGroupChat();
         var svc = CreateService(db, CreateCurrentUser(adminId));
 
-        var ex = await Assert.ThrowsAsync<AppException>(
-            () => svc.UpdateMemberRoleAsync(chatId, memberId, ChatRole.Admin, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<AppException>(() =>
+            svc.UpdateMemberRoleAsync(chatId, memberId, ChatRole.Admin, CancellationToken.None));
 
         Assert.Equal(HttpStatusCode.Forbidden, ex.StatusCode);
     }
@@ -147,8 +152,8 @@ public sealed class GroupMemberServiceTests
         var (db, chatId, ownerId, _, memberId) = SeedGroupChat();
         var svc = CreateService(db, CreateCurrentUser(ownerId));
 
-        var ex = await Assert.ThrowsAsync<AppException>(
-            () => svc.UpdateMemberRoleAsync(chatId, memberId, ChatRole.Owner, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<AppException>(() =>
+            svc.UpdateMemberRoleAsync(chatId, memberId, ChatRole.Owner, CancellationToken.None));
 
         Assert.Equal(HttpStatusCode.BadRequest, ex.StatusCode);
     }
@@ -159,8 +164,8 @@ public sealed class GroupMemberServiceTests
         var (db, chatId, ownerId, _, _) = SeedGroupChat();
         var svc = CreateService(db, CreateCurrentUser(ownerId));
 
-        var ex = await Assert.ThrowsAsync<AppException>(
-            () => svc.UpdateMemberRoleAsync(chatId, ownerId, ChatRole.Admin, CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<AppException>(() =>
+            svc.UpdateMemberRoleAsync(chatId, ownerId, ChatRole.Admin, CancellationToken.None));
 
         Assert.Equal(HttpStatusCode.BadRequest, ex.StatusCode);
     }
@@ -171,8 +176,8 @@ public sealed class GroupMemberServiceTests
         var (db, chatId, _, _, memberId) = SeedGroupChat();
         var svc = CreateService(db, CreateCurrentUser(memberId));
 
-        var ex = await Assert.ThrowsAsync<AppException>(
-            () => svc.UpdateChatAsync(chatId, new UpdateChatRequest("New Title", null), CancellationToken.None));
+        var ex = await Assert.ThrowsAsync<AppException>(() =>
+            svc.UpdateChatAsync(chatId, new UpdateChatRequest("New Title", null), CancellationToken.None));
 
         Assert.Equal(HttpStatusCode.Forbidden, ex.StatusCode);
     }

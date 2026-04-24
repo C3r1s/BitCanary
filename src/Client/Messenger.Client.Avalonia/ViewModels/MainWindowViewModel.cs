@@ -1245,47 +1245,45 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private async Task UpdateChatPreviewAsync(MessageDto message)
     {
-        var chatItem = ChatList.Chats.FirstOrDefault(x => x.Id == message.ChatId);
-
-        if (chatItem is null)
+        await Dispatcher.UIThread.InvokeAsync(async () =>
         {
-            var senderUserId = message.SenderId;
-            var isDirect = senderUserId != _sessionService.CurrentUserId;
-            var displayName = isDirect ? message.SenderDisplayName : $"Chat {message.ChatId.ToString()[..8]}";
+            var chatItem = ChatList.Chats.FirstOrDefault(x => x.Id == message.ChatId);
 
-            chatItem = new ChatListItemViewModel
+            if (chatItem is null)
             {
-                Id = message.ChatId,
-                Title = displayName,
-                Type = isDirect ? ChatType.Direct : ChatType.Group,
-                PeerUserId = isDirect ? senderUserId : Guid.Empty,
-                MemberCount = 0,
-                Subtitle = "[New message]",
-                LastActivity = TimestampFormatter.FormatTimestamp(message.CreatedAtUtc),
-                UnreadCount = 1
-            };
-            
-            Dispatcher.UIThread.Post(() =>
-            {
+                var senderUserId = message.SenderId;
+                var isDirect = senderUserId != _sessionService.CurrentUserId;
+                var displayName = isDirect ? message.SenderDisplayName : $"Chat {message.ChatId.ToString()[..8]}";
+
+                chatItem = new ChatListItemViewModel
+                {
+                    Id = message.ChatId,
+                    Title = displayName,
+                    Type = isDirect ? ChatType.Direct : ChatType.Group,
+                    PeerUserId = isDirect ? senderUserId : Guid.Empty,
+                    MemberCount = 0,
+                    Subtitle = "[New message]",
+                    LastActivity = TimestampFormatter.FormatTimestamp(message.CreatedAtUtc),
+                    UnreadCount = 1
+                };
+
                 ChatList.Chats.Insert(0, chatItem);
-                var _ = ChatList.Chats.LastOrDefault();
-                System.Diagnostics.Debug.WriteLine($"[BUG-01] Inserted chat {chatItem.Id}, count now: {ChatList.Chats.Count}");
-            });
-        }
+            }
 
-        if (chatItem is null)
-            return;
+            if (chatItem is null)
+                return;
 
-        try
-        {
-            chatItem.Subtitle = await _encryptionService.DecryptAsync(message);
-        }
-        catch
-        {
-            chatItem.Subtitle = "[Unable to decrypt]";
-        }
+            try
+            {
+                chatItem.Subtitle = await _encryptionService.DecryptAsync(message);
+            }
+            catch
+            {
+                chatItem.Subtitle = "[Unable to decrypt]";
+            }
 
-        chatItem.LastActivity = TimestampFormatter.FormatTimestamp(message.CreatedAtUtc);
+            chatItem.LastActivity = TimestampFormatter.FormatTimestamp(message.CreatedAtUtc);
+        });
     }
 
     private Task PersistMessagesAsync(Guid chatId)

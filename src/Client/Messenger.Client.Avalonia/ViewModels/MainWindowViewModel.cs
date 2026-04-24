@@ -1249,58 +1249,28 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         if (chatItem is null)
         {
-            var allChats = await _apiClient.GetChatsAsync();
-            var serverChat = allChats.FirstOrDefault(c => c.Id == message.ChatId);
-            
-            if (serverChat is not null)
-            {
-                var peer = serverChat.Members?.FirstOrDefault(m => m.UserId != _sessionService.CurrentUserId);
-                var decryptedSubtitle = "[New conversation]";
-                try
-                {
-                    decryptedSubtitle = await _encryptionService.DecryptAsync(message);
-                }
-                catch { /* ignore decrypt errors for new chat */ }
+            var senderUserId = message.SenderId;
+            var isDirect = senderUserId != _sessionService.CurrentUserId;
+            var displayName = isDirect ? message.SenderDisplayName : $"Chat {message.ChatId.ToString()[..8]}";
 
-                chatItem = new ChatListItemViewModel
-                {
-                    Id = serverChat.Id,
-                    Title = serverChat.Type == ChatType.Direct
-                        ? (string.IsNullOrEmpty(peer?.DisplayName) ? serverChat.Title : peer.DisplayName)
-                        : serverChat.Title,
-                    Type = serverChat.Type,
-                    PeerUserId = peer?.UserId ?? Guid.Empty,
-                    MemberCount = serverChat.Members?.Count ?? 0,
-                    Subtitle = decryptedSubtitle,
-                    LastActivity = TimestampFormatter.FormatTimestamp(message.CreatedAtUtc),
-                    UnreadCount = 1
-                };
-                ChatList.Chats.Insert(0, chatItem);
-                _chatSummaryCache[chatItem.Id] = serverChat;
-            }
-            else
+            chatItem = new ChatListItemViewModel
             {
-                // BUG-01: Server may not have created chat yet (race condition).
-                // Create local chat item from MessageDto directly.
-                var senderUserId = message.SenderId;
-                var isDirect = senderUserId != _sessionService.CurrentUserId;
-                
-                chatItem = new ChatListItemViewModel
-                {
-                    Id = message.ChatId,
-                    Title = isDirect ? message.SenderDisplayName : message.ChatId.ToString(),
-                    Type = isDirect ? ChatType.Direct : ChatType.Group,
-                    PeerUserId = isDirect ? senderUserId : Guid.Empty,
-                    MemberCount = 0,
-                    Subtitle = "[New conversation]",
-                    LastActivity = TimestampFormatter.FormatTimestamp(message.CreatedAtUtc),
-                    UnreadCount = 1
-                };
+                Id = message.ChatId,
+                Title = displayName,
+                Type = isDirect ? ChatType.Direct : ChatType.Group,
+                PeerUserId = isDirect ? senderUserId : Guid.Empty,
+                MemberCount = 0,
+                Subtitle = "[New message]",
+                LastActivity = TimestampFormatter.FormatTimestamp(message.CreatedAtUtc),
+                UnreadCount = 1
+            };
+            
+            Dispatcher.UIThread.Post(() =>
+            {
                 ChatList.Chats.Insert(0, chatItem);
-                
-                // Force UI to notice the new item - CollectionChanged should fire but sometimes doesn't in Avalonia
-                var _ = ChatList.Chats.LastOrDefault();  // Touch collection to ensure notification
-            }
+                var _ = ChatList.Chats.LastOrDefault();
+                System.Diagnostics.Debug.WriteLine($"[BUG-01] Inserted chat {chatItem.Id}, count now: {ChatList.Chats.Count}");
+            });
         }
 
         if (chatItem is null)

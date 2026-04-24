@@ -329,12 +329,21 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var existing = ChatList.Chats.FirstOrDefault(c =>
             c.Type == Messenger.Shared.Contracts.ChatType.Direct && c.PeerUserId == selectedUser.Id);
 
-        if (existing is not null)
+        // BUG-02 fallback: if PeerUserId is empty in local list, check server
+        if (existing is null)
         {
-            ChatList.IsUserSearchMode = false;
-            ChatList.UserSearch?.Reset();
-            NavigateToChatAsync(existing.Id);
-            return;
+            var allChats = await _apiClient.GetChatsAsync();
+            var existingChat = allChats.FirstOrDefault(c =>
+                c.Type == Messenger.Shared.Contracts.ChatType.Direct &&
+                c.Members?.Any(m => m.UserId == selectedUser.Id) == true);
+            
+            if (existingChat is not null)
+            {
+                ChatList.IsUserSearchMode = false;
+                ChatList.UserSearch?.Reset();
+                NavigateToChatAsync(existingChat.Id);
+                return;
+            }
         }
 
         // No existing chat — create one via API
@@ -749,7 +758,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         if (selectedChat is null) return;
 
         var bundle = await _apiClient.GetKeyBundleAsync(selectedChat.PeerUserId);
-        if (bundle is null) return;
+        if (bundle is null)
+        {
+            StatusMessage = $"Safety number unavailable — {selectedChat.Title} has not published their key bundle yet";
+            return;
+        }
 
         var sessionId = GetCurrentSessionId();
         byte[] localIkPublic;
@@ -759,7 +772,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         catch (InvalidOperationException)
         {
-            // Key bundle not yet loaded — can't show safety number
+            StatusMessage = "Safety number unavailable — please restart the app";
             return;
         }
 
@@ -1233,10 +1246,41 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private async Task UpdateChatPreviewAsync(MessageDto message)
     {
         var chatItem = ChatList.Chats.FirstOrDefault(x => x.Id == message.ChatId);
+
         if (chatItem is null)
         {
-            return;
+            var allChats = await _apiClient.GetChatsAsync();
+            var serverChat = allChats.FirstOrDefault(c => c.Id == message.ChatId);
+            if (serverChat is not null)
+            {
+                var peer = serverChat.Members?.FirstOrDefault(m => m.UserId != _sessionService.CurrentUserId);
+                var decryptedSubtitle = "[New conversation]";
+                try
+                {
+                    decryptedSubtitle = await _encryptionService.DecryptAsync(message);
+                }
+                catch { /* ignore decrypt errors for new chat */ }
+
+                chatItem = new ChatListItemViewModel
+                {
+                    Id = serverChat.Id,
+                    Title = serverChat.Type == ChatType.Direct
+                        ? (string.IsNullOrEmpty(peer?.DisplayName) ? serverChat.Title : peer.DisplayName)
+                        : serverChat.Title,
+                    Type = serverChat.Type,
+                    PeerUserId = peer?.UserId ?? Guid.Empty,
+                    MemberCount = serverChat.Members?.Count ?? 0,
+                    Subtitle = decryptedSubtitle,
+                    LastActivity = TimestampFormatter.FormatTimestamp(message.CreatedAtUtc),
+                    UnreadCount = 1
+                };
+                ChatList.Chats.Insert(0, chatItem);
+                _chatSummaryCache[chatItem.Id] = serverChat;
+            }
         }
+
+        if (chatItem is null)
+            return;
 
         try
         {

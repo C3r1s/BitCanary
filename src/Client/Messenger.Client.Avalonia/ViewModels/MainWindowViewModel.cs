@@ -1251,6 +1251,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             var allChats = await _apiClient.GetChatsAsync();
             var serverChat = allChats.FirstOrDefault(c => c.Id == message.ChatId);
+            
             if (serverChat is not null)
             {
                 var peer = serverChat.Members?.FirstOrDefault(m => m.UserId != _sessionService.CurrentUserId);
@@ -1276,6 +1277,26 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 };
                 ChatList.Chats.Insert(0, chatItem);
                 _chatSummaryCache[chatItem.Id] = serverChat;
+            }
+            else
+            {
+                // BUG-01: Server may not have created chat yet (race condition).
+                // Create local chat item from MessageDto directly.
+                var senderUserId = message.SenderId;
+                var isDirect = senderUserId != _sessionService.CurrentUserId;
+                
+                chatItem = new ChatListItemViewModel
+                {
+                    Id = message.ChatId,
+                    Title = isDirect ? message.SenderDisplayName : message.ChatId.ToString(),
+                    Type = isDirect ? ChatType.Direct : ChatType.Group,
+                    PeerUserId = isDirect ? senderUserId : Guid.Empty,
+                    MemberCount = 0,
+                    Subtitle = "[New conversation]",
+                    LastActivity = TimestampFormatter.FormatTimestamp(message.CreatedAtUtc),
+                    UnreadCount = 1
+                };
+                ChatList.Chats.Insert(0, chatItem);
             }
         }
 

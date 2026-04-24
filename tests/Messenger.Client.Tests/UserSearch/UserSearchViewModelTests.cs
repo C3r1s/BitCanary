@@ -48,7 +48,8 @@ public sealed class UserSearchViewModelTests
         // SearchUsersAsync is called after 300ms debounce delay.
         var profile = MakeProfile("alice", "Alice Smith");
         var client = CreateApiClient(new[] { profile });
-        var vm = new UserSearchViewModel(client, _ => Task.CompletedTask);
+        // Pass a direct dispatcher so tests don't require Avalonia UIThread to be initialized.
+        var vm = new UserSearchViewModel(client, _ => Task.CompletedTask, action => { action(); return Task.CompletedTask; });
 
         // Act — set query >= 2 chars and wait for debounce + async completion
         vm.SearchQuery = "alice";

@@ -26,6 +26,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Messenger.Application.Tests
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Messenger.Client.Tests", "tests\Messenger.Client.Tests\Messenger.Client.Tests.csproj", "{077C2C5C-127E-40C3-9515-E81F85E69260}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Messenger.Tests", "src\Backend\Messenger.Tests\Messenger.Tests.csproj", "{8493CEF1-AE6B-4322-805C-2E58C03257CA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -132,6 +134,18 @@ Global
 		{077C2C5C-127E-40C3-9515-E81F85E69260}.Release|x64.Build.0 = Release|Any CPU
 		{077C2C5C-127E-40C3-9515-E81F85E69260}.Release|x86.ActiveCfg = Release|Any CPU
 		{077C2C5C-127E-40C3-9515-E81F85E69260}.Release|x86.Build.0 = Release|Any CPU
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA}.Debug|x64.Build.0 = Debug|Any CPU
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA}.Debug|x86.Build.0 = Debug|Any CPU
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA}.Release|x64.ActiveCfg = Release|Any CPU
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA}.Release|x64.Build.0 = Release|Any CPU
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA}.Release|x86.ActiveCfg = Release|Any CPU
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -148,5 +162,6 @@ Global
 		{BB08BE7D-3D7C-4BC8-8E41-9180B48C4C65} = {C5A3B5EA-BE9F-76E5-E9B8-8A22B289B295}
 		{14DBAED3-4711-4FF8-B6C3-E816E703562E} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{077C2C5C-127E-40C3-9515-E81F85E69260} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{8493CEF1-AE6B-4322-805C-2E58C03257CA} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

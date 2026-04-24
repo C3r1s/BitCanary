@@ -11,6 +11,7 @@ public sealed partial class UserSearchViewModel : ViewModelBase
 {
     private readonly IMessengerApiClient _apiClient;
     private readonly Func<UserProfileDto, Task> _onUserSelected;
+    private readonly Func<Action, Task> _uiDispatch;
     private CancellationTokenSource? _debounceCts;
 
     [ObservableProperty]
@@ -38,10 +39,12 @@ public sealed partial class UserSearchViewModel : ViewModelBase
 
     public IRelayCommand<UserResultItemViewModel> SelectUserCommand { get; }
 
-    public UserSearchViewModel(IMessengerApiClient apiClient, Func<UserProfileDto, Task> onUserSelected)
+    public UserSearchViewModel(IMessengerApiClient apiClient, Func<UserProfileDto, Task> onUserSelected,
+        Func<Action, Task>? uiDispatch = null)
     {
         _apiClient = apiClient;
         _onUserSelected = onUserSelected;
+        _uiDispatch = uiDispatch ?? (action => Dispatcher.UIThread.InvokeAsync(action).GetTask());
 
         SelectUserCommand = new AsyncRelayCommand<UserResultItemViewModel>(
             async item => { if (item is not null) await _onUserSelected(item.Dto); },
@@ -74,11 +77,11 @@ public sealed partial class UserSearchViewModel : ViewModelBase
             {
                 await Task.Delay(300, cts.Token);
 
-                await Dispatcher.UIThread.InvokeAsync(() => IsLoading = true);
+                await _uiDispatch(() => IsLoading = true);
 
                 var results = await _apiClient.SearchUsersAsync(value.Trim(), cts.Token);
 
-                await Dispatcher.UIThread.InvokeAsync(() =>
+                await _uiDispatch(() =>
                 {
                     IsLoading = false;
                     Results.Clear();
@@ -95,7 +98,7 @@ public sealed partial class UserSearchViewModel : ViewModelBase
             }
             catch
             {
-                await Dispatcher.UIThread.InvokeAsync(() =>
+                await _uiDispatch(() =>
                 {
                     IsLoading = false;
                     HasError = true;

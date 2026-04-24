@@ -11,11 +11,13 @@ file sealed class StubSessionServiceForSearch : IClientSessionService
 {
     public string ApiBaseUrl => string.Empty;
     public string? AccessToken => null;
-    public Guid CurrentUserId { get; } = Guid.NewGuid();
+    public Guid CurrentUserId { get; }
     public string UserName => "test";
     public bool IsAuthenticated => true;
     public void SetSession(Guid userId, string userName, string accessToken) { }
     public void ClearSession() { }
+
+    public StubSessionServiceForSearch(Guid userId) => CurrentUserId = userId;
 }
 
 [Trait("Category", "Unit")]
@@ -23,13 +25,14 @@ public sealed class LocalSearchServiceTests : IAsyncDisposable
 {
     private readonly SqliteConnection _conn;
     private readonly LocalSearchService _search;
+    private readonly Guid _ownerId = Guid.NewGuid();
 
     public LocalSearchServiceTests()
     {
         _conn = new SqliteConnection("Data Source=:memory:");
         _conn.Open();
         DatabaseService.ApplySchemaForTestAsync(_conn).GetAwaiter().GetResult();
-        _search = new LocalSearchService(_conn, new StubSessionServiceForSearch());
+        _search = new LocalSearchService(_conn, new StubSessionServiceForSearch(_ownerId));
     }
 
     public async ValueTask DisposeAsync()
@@ -37,9 +40,6 @@ public sealed class LocalSearchServiceTests : IAsyncDisposable
         await _conn.DisposeAsync();
     }
 
-    /// <summary>
-    /// Inserts a chat and a message with plaintext_body set (triggers messages_ai to populate FTS).
-    /// </summary>
     private void InsertTestMessage(
         Guid chatId,
         Guid messageId,
@@ -48,28 +48,28 @@ public sealed class LocalSearchServiceTests : IAsyncDisposable
         string chatName = "Test Chat",
         string sentAt = "2024-01-01T00:00:00Z")
     {
-        // Insert chat if not already present
         using var chatCmd = _conn.CreateCommand();
         chatCmd.CommandText = """
-            INSERT OR IGNORE INTO chats (id, name, type, last_message_preview, unread_count, updated_at)
-            VALUES (@chatId, @chatName, 1, NULL, 0, @updatedAt)
+            INSERT OR IGNORE INTO chats (id, owner_user_id, name, type, last_message_preview, unread_count, updated_at)
+            VALUES (@chatId, @ownerId, @chatName, 1, NULL, 0, @updatedAt)
             """;
         chatCmd.Parameters.AddWithValue("@chatId", chatId.ToString());
+        chatCmd.Parameters.AddWithValue("@ownerId", _ownerId.ToString());
         chatCmd.Parameters.AddWithValue("@chatName", chatName);
         chatCmd.Parameters.AddWithValue("@updatedAt", sentAt);
         chatCmd.ExecuteNonQuery();
 
-        // Insert message with plaintext_body to trigger messages_ai FTS population
         using var msgCmd = _conn.CreateCommand();
         msgCmd.CommandText = """
             INSERT OR IGNORE INTO messages
-                (id, chat_id, sender_id, client_message_id, protocol_version,
+                (id, owner_user_id, chat_id, sender_id, client_message_id, protocol_version,
                  encrypted_payload, key_envelope, encryption_algorithm, sent_at, plaintext_body)
             VALUES
-                (@id, @chatId, @senderId, @id, 1,
+                (@id, @ownerId, @chatId, @senderId, @id, 1,
                  'enc', 'env', 'signal-protocol-v1', @sentAt, @plaintext)
             """;
         msgCmd.Parameters.AddWithValue("@id", messageId.ToString());
+        msgCmd.Parameters.AddWithValue("@ownerId", _ownerId.ToString());
         msgCmd.Parameters.AddWithValue("@chatId", chatId.ToString());
         msgCmd.Parameters.AddWithValue("@senderId", senderId);
         msgCmd.Parameters.AddWithValue("@sentAt", sentAt);

@@ -1297,6 +1297,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                     UnreadCount = 1
                 };
                 ChatList.Chats.Insert(0, chatItem);
+                
+                // Force UI to notice the new item - CollectionChanged should fire but sometimes doesn't in Avalonia
+                var _ = ChatList.Chats.LastOrDefault();  // Touch collection to ensure notification
             }
         }
 

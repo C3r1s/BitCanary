@@ -18,6 +18,10 @@ public sealed partial class ChatWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isSessionVerified;
 
+    /// <summary>True when the chat contains any plaintext messages (FEA-03). Drives the ! UNVERIFIED badge.</summary>
+    [ObservableProperty]
+    private bool _isUnverified;
+
     [ObservableProperty]
     private bool _isFindBarVisible;
 

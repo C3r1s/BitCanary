@@ -5,6 +5,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Messenger.Client.Avalonia.Models;
 using Messenger.Client.Avalonia.Services;
 using Messenger.Client.Avalonia.Services.Crypto;
 using Messenger.Shared.Contracts;
@@ -30,6 +31,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly ILocalSearchService _localSearchService;
     private readonly ILocalMessageRepository _localMessageRepository;
     private readonly INotificationService _notificationService;
+    private readonly ISessionManager _sessionManager;
     private Guid? _pendingNavigationChatId;
     private readonly Dictionary<Guid, MessageItemViewModel> _outgoingVmByClientId = new();
     private readonly Dictionary<Guid, ChatSummaryDto> _chatSummaryCache = new();
@@ -192,7 +194,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         IIdentityKeyChangeDetector changeDetector,
         ILocalSearchService localSearchService,
         ILocalMessageRepository localMessageRepository,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        ISessionManager sessionManager)
     {
         _apiClient = apiClient;
         _realtimeClient = realtimeClient;
@@ -206,6 +209,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _localSearchService = localSearchService;
         _localMessageRepository = localMessageRepository;
         _notificationService = notificationService;
+        _sessionManager = sessionManager;
 
         SafetyNumber = new SafetyNumberViewModel(
             _safetyNumberService,
@@ -895,7 +899,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         try
         {
             var recipientUserId = selectedChat.PeerUserId;
-            var encrypted = await _encryptionService.EncryptTextAsync(plaintext, recipientUserId);
+            var (encrypted, isPlaintext) = await BuildEncryptedDraftAsync(plaintext, recipientUserId);
             var request = new SendMessageRequest(
                 selectedChat.Id,
                 clientMessageId,
@@ -906,7 +910,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 null,
                 null,
                 encrypted.MetadataJson,
-                ProtocolVersion.SignalProtocol);
+                isPlaintext ? ProtocolVersion.Plaintext : ProtocolVersion.SignalProtocol);
 
             var message = await _apiClient.SendMessageAsync(request);
 
@@ -928,21 +932,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex) when (ex is HttpRequestException
                                        or OperationCanceledException
                                        or TaskCanceledException
-                                       or InvalidOperationException
                                        or System.Security.Cryptography.CryptographicException)
         {
-            // D-04/D-05: Mark the in-flight VM as failed — covers network errors,
-            // encryption failures (e.g. recipient has not published keys yet),
+            // D-04/D-05: Mark the in-flight VM as failed — covers network errors
             // and ratchet session errors (CryptographicException from SessionManager).
+            // Note: InvalidOperationException removed — no-keys case now handled by BuildEncryptedDraftAsync (FEA-03).
             _outgoingVmByClientId.Remove(clientMessageId);
             System.Diagnostics.Debug.WriteLine($"[SendMessageAsync] Failed: {ex.GetType().Name}: {ex.Message}");
-            var userMessage = ex is InvalidOperationException
-                ? "Send failed: recipient has no encryption keys. Ask them to open the app."
-                : "Message failed to send. Check your connection and try again.";
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 optimisticVm.Status = MessageStatus.Failed;
-                StatusMessage = userMessage;
+                StatusMessage = "Message failed to send. Check your connection and try again.";
                 ShowDebugError("SendMessageAsync", ex);
             });
         }
@@ -970,7 +970,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         try
         {
-            var encrypted = await _encryptionService.EncryptTextAsync(plaintext, recipientUserId);
+            var (encrypted, isPlaintext) = await BuildEncryptedDraftAsync(plaintext, recipientUserId);
 
             var request = new SendMessageRequest(
                 selectedChat.Id,
@@ -982,7 +982,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 null,
                 null,
                 encrypted.MetadataJson,
-                ProtocolVersion.SignalProtocol);
+                isPlaintext ? ProtocolVersion.Plaintext : ProtocolVersion.SignalProtocol);
 
             var message = await _apiClient.SendMessageAsync(request);
 
@@ -997,22 +997,55 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         catch (Exception ex) when (ex is HttpRequestException
                                        or OperationCanceledException
                                        or TaskCanceledException
-                                       or InvalidOperationException
                                        or System.Security.Cryptography.CryptographicException)
         {
-            // Covers network errors, encryption failures, and ratchet session errors.
+            // Covers network errors and ratchet session errors.
+            // Note: InvalidOperationException removed — no-keys case now handled by BuildEncryptedDraftAsync (FEA-03).
             // Revert VM status to Failed so the retry button remains visible.
             System.Diagnostics.Debug.WriteLine($"[RetryMessageAsync] Failed: {ex.GetType().Name}: {ex.Message}");
-            var userMessage = ex is InvalidOperationException
-                ? "Send failed: recipient has no encryption keys. Ask them to open the app."
-                : "Message failed to send. Check your connection and try again.";
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 vm.Status = MessageStatus.Failed;
-                StatusMessage = userMessage;
+                StatusMessage = "Message failed to send. Check your connection and try again.";
                 ShowDebugError("RetryMessageAsync", ex);
             });
         }
+    }
+
+    /// <summary>
+    /// Probes for an existing ratchet session. If one exists, encrypts normally.
+    /// If no session and no key bundle, falls back to plaintext (FEA-03).
+    /// </summary>
+    private async Task<(EncryptedMessageDraft draft, bool isPlaintext)> BuildEncryptedDraftAsync(
+        string plaintext, Guid recipientUserId, CancellationToken cancellationToken = default)
+    {
+        var sessionId = $"{_sessionService.CurrentUserId}:{recipientUserId}";
+
+        // If a ratchet session exists, encrypt directly — no bundle probe needed
+        var existingSession = await _sessionManager.GetSessionAsync(sessionId, cancellationToken);
+        if (existingSession is not null)
+        {
+            var draft = await _encryptionService.EncryptTextAsync(plaintext, recipientUserId, cancellationToken);
+            return (draft, isPlaintext: false);
+        }
+
+        // No session — probe for key bundle
+        var bundle = await _apiClient.GetKeyBundleAsync(recipientUserId, cancellationToken);
+        if (bundle is null)
+        {
+            // No keys published — plaintext fallback (FEA-03)
+            var plaintextDraft = new EncryptedMessageDraft(
+                MessageKind.Text,
+                plaintext,
+                "plaintext",
+                string.Empty,
+                null);
+            return (plaintextDraft, isPlaintext: true);
+        }
+
+        // Keys available — encrypt normally (X3DH will run inside EncryptTextAsync)
+        var encryptedDraft = await _encryptionService.EncryptTextAsync(plaintext, recipientUserId, cancellationToken);
+        return (encryptedDraft, isPlaintext: false);
     }
 
     private Task SendTypingAsync(Guid? chatId, bool isTyping)
@@ -1264,6 +1297,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         {
             await AppendMessageToWindowAsync(message);
         }
+
+        // FEA-03: recalculate unverified state from loaded history (Pitfall 3)
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            ChatWindow.IsUnverified = messages.Any(m => m.ProtocolVersion == ProtocolVersion.Plaintext);
+        });
     }
 
     private async Task AppendMessageAsync(MessageDto message)
@@ -1313,6 +1352,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             Timestamp = message.CreatedAtUtc.LocalDateTime.ToShortTimeString(),
             IsOutgoing = message.SenderId == _sessionService.CurrentUserId
         });
+
+        // FEA-03: track unverified state — set true when any plaintext message exists
+        if (message.ProtocolVersion == ProtocolVersion.Plaintext)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => ChatWindow.IsUnverified = true);
+        }
     }
 
     private async Task UpdateChatPreviewAsync(MessageDto message)

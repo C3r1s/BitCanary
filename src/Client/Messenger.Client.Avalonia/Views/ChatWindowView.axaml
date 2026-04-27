@@ -66,12 +66,12 @@
             </Border>
           </Button>
 
-          <!-- Unverified badge -->
+          <!-- Unverified badge — shown when chat contains plaintext messages (FEA-03) -->
           <Border Padding="7,3"
                   Background="#1C0808"
                   BorderBrush="#E05050"
                   BorderThickness="1"
-                  IsVisible="{Binding !IsSessionVerified}">
+                  IsVisible="{Binding IsUnverified}">
             <TextBlock Text="! UNVERIFIED" FontSize="11" Foreground="#E05050" />
           </Border>
 

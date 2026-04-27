@@ -18,9 +18,15 @@ public sealed partial class ChatWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isSessionVerified;
 
-    /// <summary>True when the chat contains any plaintext messages (FEA-03). Drives the ! UNVERIFIED badge.</summary>
+    /// <summary>True when the chat contains any plaintext messages (FEA-03).</summary>
     [ObservableProperty]
     private bool _isUnverified;
+
+    /// <summary>True when badge should show — either plaintext messages present OR safety number not verified.</summary>
+    public bool ShowUnverifiedBadge => IsUnverified || !IsSessionVerified;
+
+    partial void OnIsUnverifiedChanged(bool value) => OnPropertyChanged(nameof(ShowUnverifiedBadge));
+    partial void OnIsSessionVerifiedChanged(bool value) => OnPropertyChanged(nameof(ShowUnverifiedBadge));
 
     [ObservableProperty]
     private bool _isFindBarVisible;

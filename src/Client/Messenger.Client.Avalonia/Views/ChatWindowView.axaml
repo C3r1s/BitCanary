@@ -71,7 +71,7 @@
                   Background="#1C0808"
                   BorderBrush="#E05050"
                   BorderThickness="1"
-                  IsVisible="{Binding IsUnverified}">
+                  IsVisible="{Binding ShowUnverifiedBadge}">
             <TextBlock Text="! UNVERIFIED" FontSize="11" Foreground="#E05050" />
           </Border>
 

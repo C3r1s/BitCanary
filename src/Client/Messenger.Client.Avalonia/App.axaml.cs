@@ -62,6 +62,9 @@ public partial class App : Application
         }
 
         base.OnFrameworkInitializationCompleted();
+
+        // STAB-01: now that the dispatcher exists, hook the UI-thread handler.
+        GlobalExceptionHandler.RegisterUiThreadHandler();
     }
 
     private static IServiceProvider BuildServices()

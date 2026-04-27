@@ -111,6 +111,14 @@ public sealed class SignalProtocolEncryptionService(
 
     public async Task<string> DecryptAsync(MessageDto message, CancellationToken cancellationToken = default)
     {
+        // FEA-03: plaintext fallback — return payload directly, persist for FTS5 search
+        if (message.ProtocolVersion == ProtocolVersion.Plaintext)
+        {
+            await localMessageRepository.SaveMessageAsync(message, (int)message.ProtocolVersion, cancellationToken);
+            await localMessageRepository.UpdatePlaintextBodyAsync(message.Id, message.EncryptedPayload, cancellationToken);
+            return message.EncryptedPayload;
+        }
+
         // Per D-03: delegate legacy messages to LocalEnvelopeEncryptionService
         if (message.ProtocolVersion == ProtocolVersion.LegacyAes)
         {

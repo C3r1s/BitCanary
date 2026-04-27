@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
@@ -36,5 +36,6 @@
     <ProjectReference Include="..\Messenger.Domain\Messenger.Domain.csproj" />
     <ProjectReference Include="..\Messenger.Infrastructure\Messenger.Infrastructure.csproj" />
     <ProjectReference Include="..\..\Shared\Messenger.Shared.Contracts\Messenger.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\..\Client\Messenger.Client.Avalonia\Messenger.Client.Avalonia.csproj" />
   </ItemGroup>
 </Project>

@@ -9,7 +9,21 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMessengerApi(builder.Configuration, builder.Environment);
 
+// CORS for web client
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.AllowAnyOrigin()
+            .AllowAnyMethod()
+            .AllowAnyHeader();
+    });
+});
+
 var app = builder.Build();
+
+// CORS middleware - before authentication
+app.UseCors();
 
 // ── Database migration ──────────────────────────────────────────────────────
 // Applies any pending EF Core migrations at startup so the DB stays in sync.
@@ -22,6 +36,7 @@ using (var scope = app.Services.CreateScope())
 
 // ── Middleware ──────────────────────────────────────────────────────────────
 app.UseMiddleware<ExceptionHandlingMiddleware>();
+app.UseCors();
 
 if (app.Environment.IsDevelopment())
 {

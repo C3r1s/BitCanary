@@ -1012,14 +1012,17 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         await Dispatcher.UIThread.InvokeAsync(async () =>
         {
             await UpdateChatPreviewAsync(message);
-            // AppendMessageAsync adds to _messageCache (so PersistMessagesAsync saves correctly)
-            // and conditionally adds to ChatWindow.Messages when this chat is selected.
             await AppendMessageAsync(message);
             chatItem = ChatList.Chats.FirstOrDefault(c => c.Id == message.ChatId);
         });
 
-        // D-04/D-05 (CONTEXT.md): ShowIfMinimized guards internally on WindowState == Minimized.
         _notificationService.ShowIfMinimized(message.ChatId, chatItem?.Title);
+
+        // BUG-01 fix: refresh chat list to fetch new chats from server
+        if (ChatList.RefreshCommand.CanExecute(null))
+        {
+            await ChatList.RefreshCommand.ExecuteAsync(null);
+        }
 
         await PersistMessagesAsync(message.ChatId);
     }
@@ -1180,7 +1183,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _chatSummaryCache[chat.Id] = chat;
         }
 
-        ChatList.SelectedChat ??= ChatList.Chats.FirstOrDefault();
+        // Preserve existing selection — don't auto-select first chat
+        // ChatList.SelectedChat ??= ChatList.Chats.FirstOrDefault();
     }
 
     private async Task ReplaceMessagesAsync(Guid chatId, IReadOnlyCollection<MessageDto> messages)

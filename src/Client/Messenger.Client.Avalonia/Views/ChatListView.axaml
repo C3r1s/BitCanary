@@ -85,6 +85,37 @@
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:ChatListItemViewModel">
           <Border BorderBrush="#141414" BorderThickness="0,0,0,1" Padding="12,9">
+            <Border.ContextMenu>
+              <ContextMenu Background="#111111"
+                           BorderBrush="#1E1E1E"
+                           BorderThickness="1"
+                           CornerRadius="0"
+                           MinWidth="160">
+                <MenuItem Header="Delete chat"
+                          Command="{Binding DeleteChatCommand}"
+                          Foreground="#E05050"
+                          FontSize="12"
+                          Padding="8,8">
+                  <MenuItem.Styles>
+                    <Style Selector="MenuItem:pointerover /template/ ContentPresenter">
+                      <Setter Property="Background" Value="#1A0505" />
+                    </Style>
+                  </MenuItem.Styles>
+                </MenuItem>
+                <Separator Background="#1E1E1E" />
+                <MenuItem Header="Clear messages"
+                          Command="{Binding ClearMessagesCommand}"
+                          Foreground="#C8C8C8"
+                          FontSize="12"
+                          Padding="8,8">
+                  <MenuItem.Styles>
+                    <Style Selector="MenuItem:pointerover /template/ ContentPresenter">
+                      <Setter Property="Background" Value="#1A1A1A" />
+                    </Style>
+                  </MenuItem.Styles>
+                </MenuItem>
+              </ContextMenu>
+            </Border.ContextMenu>
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
               <!-- Name + preview -->
               <StackPanel Spacing="3" VerticalAlignment="Center">

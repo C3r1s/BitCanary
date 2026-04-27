@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BitCanary Messenger</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Login Screen -->
+        <div id="login-screen" class="screen">
+            <div class="login-box">
+                <h1>BitCanary</h1>
+                <p class="subtitle">Encrypted Messenger</p>
+                <form id="login-form">
+                    <input type="text" id="username" placeholder="Username" required>
+                    <input type="password" id="password" placeholder="Password" required>
+                    <button type="submit">Sign In</button>
+                </form>
+                <p id="login-error" class="error hidden"></p>
+            </div>
+        </div>
+
+        <!-- Main Screen -->
+        <div id="main-screen" class="screen hidden">
+            <!-- Header -->
+            <header>
+                <span id="current-user"></span>
+                <button id="logout-btn">Logout</button>
+            </header>
+
+            <div class="content">
+                <!-- Chat List -->
+                <aside id="chat-list">
+                    <div class="chat-list-header">CHANNELS</div>
+                    <div id="chats"></div>
+                </aside>
+
+                <!-- Chat Window -->
+                <main id="chat-window">
+                    <div id="chat-header">
+                        <span id="chat-title">Select a chat</span>
+                    </div>
+                    <div id="messages"></div>
+                    <form id="message-form">
+                        <input type="text" id="message-input" placeholder="Type a message..." disabled>
+                        <button type="submit" disabled>Send</button>
+                    </form>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/@microsoft/signalr@latest/dist/browser/signalr.min.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>

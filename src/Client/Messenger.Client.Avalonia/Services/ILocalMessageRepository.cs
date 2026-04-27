@@ -37,4 +37,10 @@ public interface ILocalMessageRepository
     /// Marks all outgoing messages in the chat as Read for the current user.
     /// </summary>
     Task MarkMessagesReadAsync(Guid chatId, Guid currentUserId, CancellationToken cancellationToken = default);
+
+    /// <summary>Deletes all messages then the chat row for chatId scoped to the current owner. Messages first — FK constraint.</summary>
+    Task DeleteChatAsync(Guid chatId, CancellationToken ct = default);
+
+    /// <summary>Deletes all messages in chatId but leaves the chat row intact.</summary>
+    Task ClearMessagesAsync(Guid chatId, CancellationToken ct = default);
 }

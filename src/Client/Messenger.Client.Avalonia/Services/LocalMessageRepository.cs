@@ -208,6 +208,45 @@ public sealed class LocalMessageRepository(
     }
 
     /// <inheritdoc/>
+    public async Task DeleteChatAsync(Guid chatId, CancellationToken ct = default)
+    {
+        // Delete messages first — FK constraint requires this order
+        await using var cmd1 = connection.CreateCommand();
+        cmd1.CommandText = """
+            DELETE FROM messages
+            WHERE chat_id = @chatId
+              AND owner_user_id = @ownerId
+            """;
+        cmd1.Parameters.AddWithValue("@chatId", chatId.ToString());
+        cmd1.Parameters.AddWithValue("@ownerId", OwnerId);
+        await cmd1.ExecuteNonQueryAsync(ct);
+
+        await using var cmd2 = connection.CreateCommand();
+        cmd2.CommandText = """
+            DELETE FROM chats
+            WHERE id = @chatId
+              AND owner_user_id = @ownerId
+            """;
+        cmd2.Parameters.AddWithValue("@chatId", chatId.ToString());
+        cmd2.Parameters.AddWithValue("@ownerId", OwnerId);
+        await cmd2.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <inheritdoc/>
+    public async Task ClearMessagesAsync(Guid chatId, CancellationToken ct = default)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            DELETE FROM messages
+            WHERE chat_id = @chatId
+              AND owner_user_id = @ownerId
+            """;
+        cmd.Parameters.AddWithValue("@chatId", chatId.ToString());
+        cmd.Parameters.AddWithValue("@ownerId", OwnerId);
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<ChatSummaryDto>> GetChatsAsync(
         CancellationToken cancellationToken = default)
     {

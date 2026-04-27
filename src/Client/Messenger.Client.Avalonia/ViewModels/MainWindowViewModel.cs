@@ -694,6 +694,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         var selectedChat = ChatList.SelectedChat;
         ChatWindow.Messages.Clear();
+        ChatWindow.IsUnverified = false;
         ChatWindow.TypingStatus = string.Empty;
 
         if (selectedChat is null)

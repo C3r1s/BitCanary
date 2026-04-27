@@ -125,7 +125,7 @@ public sealed class UserSearchViewModelTests
         // as HandleUserSelectedAsync is private on MainWindowViewModel.
         var vm = new ChatListViewModel(() => Task.CompletedTask);
         var peerId = Guid.NewGuid();
-        var existingChat = new ChatListItemViewModel
+        var existingChat = new ChatListItemViewModel(_ => Task.CompletedTask, _ => Task.CompletedTask)
         {
             Id = Guid.NewGuid(),
             Title = "Alice",

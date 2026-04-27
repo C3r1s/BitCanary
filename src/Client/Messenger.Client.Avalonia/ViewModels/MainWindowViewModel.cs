@@ -1201,7 +1201,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 ? TimestampFormatter.FormatTimestamp(chat.LastMessage.CreatedAtUtc)
                 : string.Empty;
 
-            ChatList.Chats.Add(new ChatListItemViewModel
+            ChatList.Chats.Add(new ChatListItemViewModel(DeleteChatAsync, ClearChatMessagesAsync)
             {
                 Id = chat.Id,
                 Title = chat.Type == Messenger.Shared.Contracts.ChatType.Direct
@@ -1293,7 +1293,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 var isDirect = senderUserId != _sessionService.CurrentUserId;
                 var displayName = isDirect ? message.SenderDisplayName : $"Chat {message.ChatId.ToString()[..8]}";
 
-                chatItem = new ChatListItemViewModel
+                chatItem = new ChatListItemViewModel(DeleteChatAsync, ClearChatMessagesAsync)
                 {
                     Id = message.ChatId,
                     Title = displayName,
@@ -1341,4 +1341,56 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private static string ChatsKey(Guid userId) => $"chats-{userId:N}";
 
     private string SettingsKey() => $"settings-{_sessionService.CurrentUserId:N}";
+
+    private async Task DeleteChatAsync(Guid chatId)
+    {
+        try
+        {
+            await _localMessageRepository.DeleteChatAsync(chatId);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = "failed to delete chat";
+            ShowDebugError("DeleteChatAsync", ex);
+            return;
+        }
+
+        _messageCache.Remove(chatId);
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var item = ChatList.Chats.FirstOrDefault(c => c.Id == chatId);
+            if (item is null) return;
+
+            if (ChatList.SelectedChat?.Id == chatId)
+            {
+                ChatList.SelectedChat = null;
+                // Setting SelectedChat = null triggers LoadSelectedChatAsync which clears ChatWindow.Messages
+            }
+
+            ChatList.Chats.Remove(item);
+        });
+    }
+
+    private async Task ClearChatMessagesAsync(Guid chatId)
+    {
+        try
+        {
+            await _localMessageRepository.ClearMessagesAsync(chatId);
+        }
+        catch (Exception ex)
+        {
+            StatusMessage = "failed to clear messages";
+            ShowDebugError("ClearChatMessagesAsync", ex);
+            return;
+        }
+
+        // Evict cache BEFORE UI update to prevent stale re-injection via AppendMessageAsync
+        _messageCache.Remove(chatId);
+
+        if (ChatList.SelectedChat?.Id == chatId)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => ChatWindow.Messages.Clear());
+        }
+    }
 }

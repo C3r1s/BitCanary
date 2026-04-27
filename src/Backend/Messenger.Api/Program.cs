@@ -9,12 +9,16 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMessengerApi(builder.Configuration, builder.Environment);
 
-// CORS for web client
+// CORS for web client — origins loaded from Cors:AllowedOrigins config (WEB-02)
+var allowedOrigins = builder.Configuration
+    .GetSection("Cors:AllowedOrigins")
+    .Get<string[]>() ?? [];
+
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.AllowAnyOrigin()
+        policy.WithOrigins(allowedOrigins)
             .AllowAnyMethod()
             .AllowAnyHeader();
     });
@@ -36,7 +40,6 @@ using (var scope = app.Services.CreateScope())
 
 // ── Middleware ──────────────────────────────────────────────────────────────
 app.UseMiddleware<ExceptionHandlingMiddleware>();
-app.UseCors();
 
 if (app.Environment.IsDevelopment())
 {

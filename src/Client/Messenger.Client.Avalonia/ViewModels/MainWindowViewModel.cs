@@ -33,6 +33,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private Guid? _pendingNavigationChatId;
     private readonly Dictionary<Guid, MessageItemViewModel> _outgoingVmByClientId = new();
     private readonly Dictionary<Guid, ChatSummaryDto> _chatSummaryCache = new();
+    // Locally deleted/cleared chats — persisted so server re-sync doesn't resurrect them
+    private readonly HashSet<Guid> _deletedChatIds = new();
+    private readonly Dictionary<Guid, DateTimeOffset> _clearedChats = new();
 
     [ObservableProperty]
     private string _statusMessage = "Loading local cache...";
@@ -465,6 +468,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         ChatWindow.IsGroupInfoVisible = false;
         _messageCache.Clear();
         _chatSummaryCache.Clear();
+        _deletedChatIds.Clear();
+        _clearedChats.Clear();
 
         // Invalidate the user-scoped chats cache so a subsequent login (any user) loads fresh data.
         _ = _localCacheService.SaveAsync(ChatsKey(userId), Array.Empty<ChatSummaryDto>());
@@ -741,7 +746,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var cachedMessages = await _localCacheService.LoadAsync<IReadOnlyCollection<MessageDto>>(cacheKey);
         if (cachedMessages is not null)
         {
-            await ReplaceMessagesAsync(selectedChat.Id, cachedMessages);
+            var filtered = _clearedChats.TryGetValue(selectedChat.Id, out var clearedAt)
+                ? cachedMessages.Where(m => m.CreatedAtUtc > clearedAt).ToList()
+                : cachedMessages;
+            await ReplaceMessagesAsync(selectedChat.Id, filtered);
         }
 
         if (_sessionService.IsAuthenticated)
@@ -749,8 +757,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             try
             {
                 var messages = await _apiClient.GetMessagesAsync(selectedChat.Id);
-                await ReplaceMessagesAsync(selectedChat.Id, messages);
-                await _localCacheService.SaveAsync(cacheKey, messages);
+                // Filter out messages cleared locally — show only those created after the clear timestamp
+                var filteredMessages = _clearedChats.TryGetValue(selectedChat.Id, out var clearedAt)
+                    ? messages.Where(m => m.CreatedAtUtc > clearedAt).ToList()
+                    : (IReadOnlyCollection<MessageDto>)messages;
+                await ReplaceMessagesAsync(selectedChat.Id, filteredMessages);
+                await _localCacheService.SaveAsync(cacheKey, filteredMessages);
                 await _realtimeClient.JoinChatAsync(selectedChat.Id);
                 // Notify senders that their messages have been read (D-03, D-07)
                 await _realtimeClient.SendReadReceiptAsync(selectedChat.Id);
@@ -1133,10 +1145,29 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private async Task LoadCachedChatsAsync()
     {
+        await LoadLocalDeletionStateAsync();
+
         var chats = await _localCacheService.LoadAsync<IReadOnlyCollection<ChatSummaryDto>>(ChatsKey());
         if (chats is not null)
         {
             await ApplyChatSummariesAsync(chats);
+        }
+    }
+
+    private async Task LoadLocalDeletionStateAsync()
+    {
+        var deletedIds = await _localCacheService.LoadAsync<List<string>>(DeletedChatsKey());
+        if (deletedIds is not null)
+        {
+            foreach (var id in deletedIds)
+                if (Guid.TryParse(id, out var g)) _deletedChatIds.Add(g);
+        }
+
+        var clearedMap = await _localCacheService.LoadAsync<Dictionary<string, DateTimeOffset>>(ClearedChatsKey());
+        if (clearedMap is not null)
+        {
+            foreach (var (k, v) in clearedMap)
+                if (Guid.TryParse(k, out var g)) _clearedChats[g] = v;
         }
     }
 
@@ -1159,6 +1190,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         foreach (var chat in chats)
         {
+            // Skip locally deleted chats — don't re-add from server
+            if (_deletedChatIds.Contains(chat.Id)) continue;
+
             // Persist chat to SQLite so FTS5 search JOIN resolves chat names
             await _localMessageRepository.UpsertChatAsync(chat);
 
@@ -1341,6 +1375,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private static string ChatsKey(Guid userId) => $"chats-{userId:N}";
 
     private string SettingsKey() => $"settings-{_sessionService.CurrentUserId:N}";
+    private string DeletedChatsKey() => $"deleted-chats-{_sessionService.CurrentUserId:N}";
+    private string ClearedChatsKey() => $"cleared-chats-{_sessionService.CurrentUserId:N}";
 
     private async Task DeleteChatAsync(Guid chatId)
     {
@@ -1355,7 +1391,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        _deletedChatIds.Add(chatId);
+        await _localCacheService.SaveAsync(DeletedChatsKey(), _deletedChatIds.Select(g => g.ToString()).ToList());
+
         _messageCache.Remove(chatId);
+        _clearedChats.Remove(chatId);
 
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
@@ -1385,8 +1425,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        var clearedAt = DateTimeOffset.UtcNow;
+        _clearedChats[chatId] = clearedAt;
+        await _localCacheService.SaveAsync(ClearedChatsKey(),
+            _clearedChats.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value));
+
         // Evict cache BEFORE UI update to prevent stale re-injection via AppendMessageAsync
         _messageCache.Remove(chatId);
+        await _localCacheService.SaveAsync(GetMessageCacheKey(chatId), Array.Empty<MessageDto>());
 
         if (ChatList.SelectedChat?.Id == chatId)
         {

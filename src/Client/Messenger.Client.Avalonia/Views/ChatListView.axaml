@@ -84,7 +84,7 @@
              Padding="0">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:ChatListItemViewModel">
-          <Border BorderBrush="#141414" BorderThickness="0,0,0,1" Padding="12,9">
+          <Border BorderBrush="#141414" BorderThickness="0,0,0,1" Padding="12,9" Background="Transparent">
             <Border.ContextMenu>
               <ContextMenu Background="#111111"
                            BorderBrush="#1E1E1E"

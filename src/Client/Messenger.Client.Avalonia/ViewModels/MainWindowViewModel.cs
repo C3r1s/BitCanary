@@ -308,6 +308,40 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         IsShowingDebugError = true;
     }
 
+    /// <summary>
+    /// Public entry point used by the global exception handler. Formats the exception
+    /// into a user-readable block and shows the fatal-error overlay on the UI thread.
+    /// Safe to call from any thread.
+    /// </summary>
+    public void ShowFatalError(string source, Exception ex)
+    {
+        var text =
+            $"An unexpected error occurred while the application was running.\n" +
+            $"You can close this dialog and continue using BitCanary.\n\n" +
+            $"Source  : {source}\n" +
+            $"Type    : {ex.GetType().FullName}\n" +
+            $"Message : {ex.Message}\n\n" +
+            $"--- Inner Exception ---\n" +
+            (ex.InnerException is not null
+                ? $"{ex.InnerException.GetType().FullName}: {ex.InnerException.Message}\n\n"
+                : "(none)\n\n") +
+            $"--- Stack Trace ---\n{ex.StackTrace}";
+
+        if (Dispatcher.UIThread.CheckAccess())
+        {
+            DebugErrorText = text;
+            IsShowingDebugError = true;
+        }
+        else
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                DebugErrorText = text;
+                IsShowingDebugError = true;
+            });
+        }
+    }
+
     private void NavigateToSearchResult(SearchResultItemViewModel result)
     {
         // Close global search mode

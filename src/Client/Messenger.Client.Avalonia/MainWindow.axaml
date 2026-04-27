@@ -177,7 +177,7 @@
     </Grid>
 
     <!-- ═══════════════════════════════════════════════════════════
-         DEBUG ERROR OVERLAY  (temporary — remove when done)
+         FATAL ERROR OVERLAY  (STAB-01 — survives unhandled exceptions)
     ═══════════════════════════════════════════════════════════════ -->
     <Grid IsVisible="{Binding IsShowingDebugError}"
           Background="#CC000000"
@@ -194,7 +194,7 @@
                   BorderBrush="#E05050" BorderThickness="0,0,0,1"
                   Padding="14,8">
             <Grid ColumnDefinitions="*,Auto">
-              <TextBlock Text="[ DEBUG ] Send Error"
+              <TextBlock Text="Something went wrong"
                          FontSize="13" FontWeight="Bold"
                          Foreground="#E05050"
                          VerticalAlignment="Center" />

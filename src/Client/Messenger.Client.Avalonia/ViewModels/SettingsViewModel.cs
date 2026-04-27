@@ -105,8 +105,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
         _changeThemeAsync = changeThemeAsync;
         _keyPublicationService = keyPublicationService;
         _applyTerminalScheme = applyTerminalScheme;
-        SelectedThemeOption = ThemeOptions[0];
-        SelectedTerminalScheme = TerminalSchemeOptions[0];
+        _selectedThemeOption = ThemeOptions[0];       // bypass setter — avoids firing _changeThemeAsync before MainWindowViewModel.Settings is assigned
+        _selectedTerminalScheme = TerminalSchemeOptions[0];
 
         RegenerateIdentityKeyCommand = new AsyncRelayCommand(RegenerateIdentityKeyAsync);
         ShowRegenerateConfirmCommand = new RelayCommand(() => IsConfirmingRegenerate = true);

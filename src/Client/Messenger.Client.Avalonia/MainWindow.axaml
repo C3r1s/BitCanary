@@ -208,7 +208,7 @@
           </Border>
 
           <!-- Scrollable error detail -->
-          <ScrollViewer Grid.Row="1" Padding="14,10">
+          <ScrollViewer Grid.Row="1" MaxHeight="420" Padding="14,10">
             <TextBlock Text="{Binding DebugErrorText}"
                        FontSize="11"
                        FontFamily="Consolas,Courier New,monospace"

@@ -71,9 +71,15 @@ public static class GlobalExceptionHandler
     {
         try
         {
-            // Best-effort console trace so devs see something even if VM resolution fails.
-            System.Diagnostics.Debug.WriteLine(
-                $"[GlobalExceptionHandler] {source}: {ex.GetType().FullName}: {ex.Message}");
+            Console.Error.WriteLine($"[CRASH] {source}\n{ex}\n");
+
+            // Write full stack trace to crash.log so it's readable even if dialog can't scroll
+            var logPath = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Messenger.Client.Avalonia", "crash.log");
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(logPath)!);
+            System.IO.File.AppendAllText(logPath,
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {source}\n{ex}\n\n");
 
             var vm = App.Services.GetService<MainWindowViewModel>();
             vm?.ShowFatalError(source, ex);

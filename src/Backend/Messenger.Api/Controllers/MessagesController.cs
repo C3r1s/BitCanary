@@ -23,7 +23,8 @@ public sealed class MessagesController(IMessageService messageService) : Control
             request.KeyEnvelope,
             request.MediaId,
             request.ReplyToMessageId,
-            request.MetadataJson);
+            request.MetadataJson,
+            request.ProtocolVersion);
 
         return messageService.SendAsync(command, cancellationToken);
     }

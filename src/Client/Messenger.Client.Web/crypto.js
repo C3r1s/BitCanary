@@ -124,6 +124,21 @@
         return resp.json();
     }
 
+    async function apiGet(token, endpoint) {
+        if (!token) {
+            throw new Error('Cannot call API without auth token.');
+        }
+        const headers = { 'Authorization': 'Bearer ' + token };
+        const resp = await fetch(API_BASE + endpoint, { headers: headers });
+        if (resp.status === 404) {
+            return null;
+        }
+        if (!resp.ok) {
+            throw new Error('HTTP ' + resp.status);
+        }
+        return resp.json();
+    }
+
     async function generateKeyBundle() {
         ensureSodiumGlobal();
         await sodium.ready;
@@ -224,9 +239,337 @@
         };
     }
 
+    function ed25519PubToX25519(ed25519Pub) {
+        return sodium.crypto_sign_ed25519_pk_to_curve25519(ed25519Pub);
+    }
+
+    function ed25519PrivToX25519(ikSeed, ikPublic) {
+        const sk64 = concat(ikSeed, ikPublic);
+        return sodium.crypto_sign_ed25519_sk_to_curve25519(sk64);
+    }
+
+    function messageNumberToNonce(n) {
+        const nonce = new Uint8Array(12);
+        const view = new DataView(nonce.buffer);
+        view.setUint32(0, n & 0xFFFFFFFF, true);
+        view.setUint32(4, Math.floor(n / 0x100000000), true);
+        return nonce;
+    }
+
+    function buildAssociatedData(senderId, recipientId) {
+        return new TextEncoder().encode(senderId + ':' + recipientId);
+    }
+
+    const DR_INFO = new TextEncoder().encode('DR-RK');
+    const X3DH_INFO = new TextEncoder().encode('X3DH');
+
+    function kdfRk(rootKey, dhOutput) {
+        return hkdfSha256(dhOutput, rootKey, DR_INFO, 64);
+    }
+
+    function x3dhInitiate(localBundle, remoteBundleDto) {
+        const remoteIkEd = fromBase64(remoteBundleDto.ikPublic);
+        const remoteSpk = fromBase64(remoteBundleDto.spkPublic);
+        const remoteSig = fromBase64(remoteBundleDto.spkSignature);
+
+        if (!sodium.crypto_sign_verify_detached(remoteSig, remoteSpk, remoteIkEd)) {
+            throw new Error('Invalid SPK signature');
+        }
+
+        const ekPair = sodium.crypto_box_keypair();
+        const localIkSeed = fromBase64(localBundle.ikSeed);
+        const localIkPub = fromBase64(localBundle.ikPublic);
+        const localIkX25519Priv = ed25519PrivToX25519(localIkSeed, localIkPub);
+        const remoteIkX25519Pub = ed25519PubToX25519(remoteIkEd);
+
+        const dh1 = sodium.crypto_scalarmult(localIkX25519Priv, remoteSpk);
+        const dh2 = sodium.crypto_scalarmult(ekPair.privateKey, remoteIkX25519Pub);
+        const dh3 = sodium.crypto_scalarmult(ekPair.privateKey, remoteSpk);
+
+        let ikm;
+        if (remoteBundleDto.opkPublic) {
+            const remoteOpk = fromBase64(remoteBundleDto.opkPublic);
+            const dh4 = sodium.crypto_scalarmult(ekPair.privateKey, remoteOpk);
+            ikm = concat(dh1, dh2, dh3, dh4);
+        } else {
+            ikm = concat(dh1, dh2, dh3);
+        }
+
+        const sk = hkdfSha256(ikm, new Uint8Array(32), X3DH_INFO, 32);
+        return {
+            sharedSecret: sk,
+            ekPublic: ekPair.publicKey,
+            header: {
+                ek_pub: toBase64(ekPair.publicKey),
+                opk_id: remoteBundleDto.opkId || null,
+                ik_pub: toBase64(localIkPub)
+            }
+        };
+    }
+
+    function x3dhRespond(localBundle, localOpkPrivateBytes, incomingHeader) {
+        const ekPub = fromBase64(incomingHeader.ek_pub);
+        const remoteIkEd = fromBase64(incomingHeader.ik_pub);
+
+        const localIkSeed = fromBase64(localBundle.ikSeed);
+        const localIkPub = fromBase64(localBundle.ikPublic);
+        const localSpkPriv = fromBase64(localBundle.spkPrivate);
+
+        const localIkX25519Priv = ed25519PrivToX25519(localIkSeed, localIkPub);
+        const remoteIkX25519Pub = ed25519PubToX25519(remoteIkEd);
+
+        const dh1 = sodium.crypto_scalarmult(localSpkPriv, remoteIkX25519Pub);
+        const dh2 = sodium.crypto_scalarmult(localIkX25519Priv, ekPub);
+        const dh3 = sodium.crypto_scalarmult(localSpkPriv, ekPub);
+
+        let ikm;
+        if (localOpkPrivateBytes) {
+            const dh4 = sodium.crypto_scalarmult(localOpkPrivateBytes, ekPub);
+            ikm = concat(dh1, dh2, dh3, dh4);
+        } else {
+            ikm = concat(dh1, dh2, dh3);
+        }
+        return hkdfSha256(ikm, new Uint8Array(32), X3DH_INFO, 32);
+    }
+
+    function drInitInitiator(sharedSecret, remoteSpkPublic) {
+        const dhPair = sodium.crypto_box_keypair();
+        const dhOutput = sodium.crypto_scalarmult(dhPair.privateKey, remoteSpkPublic);
+        const kdf = kdfRk(sharedSecret, dhOutput);
+        return {
+            rootKey: kdf.slice(0, 32),
+            sendingChainKey: kdf.slice(32, 64),
+            receivingChainKey: null,
+            dhSendingPrivate: dhPair.privateKey,
+            dhSendingPublic: dhPair.publicKey,
+            dhReceivingPublic: remoteSpkPublic,
+            sendMessageNumber: 0,
+            receiveMessageNumber: 0,
+            previousSendingChainLength: 0
+        };
+    }
+
+    function drInitResponder(sharedSecret, ownSpkPrivate, ownSpkPublic) {
+        return {
+            rootKey: new Uint8Array(sharedSecret),
+            sendingChainKey: null,
+            receivingChainKey: null,
+            dhSendingPrivate: new Uint8Array(ownSpkPrivate),
+            dhSendingPublic: new Uint8Array(ownSpkPublic),
+            dhReceivingPublic: null,
+            sendMessageNumber: 0,
+            receiveMessageNumber: 0,
+            previousSendingChainLength: 0
+        };
+    }
+
+    function drEncrypt(state, plaintext, associatedData) {
+        if (!state.sendingChainKey) {
+            throw new Error('Sending chain key not initialized');
+        }
+        const messageKey = sodium.crypto_auth_hmacsha256(new Uint8Array([0x01]), state.sendingChainKey);
+        state.sendingChainKey = sodium.crypto_auth_hmacsha256(new Uint8Array([0x02]), state.sendingChainKey);
+        const nonce = messageNumberToNonce(state.sendMessageNumber);
+        const ciphertext = sodium.crypto_aead_chacha20poly1305_ietf_encrypt(
+            plaintext, associatedData, null, nonce, messageKey);
+        const result = {
+            ciphertext: ciphertext,
+            ratchetPublic: new Uint8Array(state.dhSendingPublic),
+            previousChainLength: state.previousSendingChainLength,
+            messageNumber: state.sendMessageNumber
+        };
+        state.sendMessageNumber += 1;
+        return result;
+    }
+
+    function uint8Equal(a, b) {
+        if (a.length !== b.length) {
+            return false;
+        }
+        for (let i = 0; i < a.length; i++) {
+            if (a[i] !== b[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function drDecrypt(state, ciphertext, ratchetPublic, previousChainLength, messageNumber, associatedData) {
+        const isDhRatchetNeeded = !state.dhReceivingPublic || !uint8Equal(state.dhReceivingPublic, ratchetPublic);
+
+        if (isDhRatchetNeeded) {
+            state.previousSendingChainLength = state.sendMessageNumber;
+            state.sendMessageNumber = 0;
+            state.receiveMessageNumber = 0;
+            state.dhReceivingPublic = new Uint8Array(ratchetPublic);
+
+            const dhOut1 = sodium.crypto_scalarmult(state.dhSendingPrivate, ratchetPublic);
+            const kdf1 = kdfRk(state.rootKey, dhOut1);
+            state.rootKey = kdf1.slice(0, 32);
+            state.receivingChainKey = kdf1.slice(32, 64);
+
+            const newDh = sodium.crypto_box_keypair();
+            const dhOut2 = sodium.crypto_scalarmult(newDh.privateKey, ratchetPublic);
+            const kdf2 = kdfRk(state.rootKey, dhOut2);
+            state.rootKey = kdf2.slice(0, 32);
+            state.sendingChainKey = kdf2.slice(32, 64);
+            state.dhSendingPrivate = newDh.privateKey;
+            state.dhSendingPublic = newDh.publicKey;
+        }
+
+        while (state.receiveMessageNumber < messageNumber) {
+            state.receivingChainKey = sodium.crypto_auth_hmacsha256(new Uint8Array([0x02]), state.receivingChainKey);
+            state.receiveMessageNumber += 1;
+        }
+
+        if (!state.receivingChainKey) {
+            throw new Error('Receiving chain key not initialized');
+        }
+        const messageKey = sodium.crypto_auth_hmacsha256(new Uint8Array([0x01]), state.receivingChainKey);
+        state.receivingChainKey = sodium.crypto_auth_hmacsha256(new Uint8Array([0x02]), state.receivingChainKey);
+        state.receiveMessageNumber += 1;
+
+        const nonce = messageNumberToNonce(messageNumber);
+        const plaintext = sodium.crypto_aead_chacha20poly1305_ietf_decrypt(
+            null, ciphertext, associatedData, nonce, messageKey);
+        return plaintext;
+    }
+
+    function serializeRatchetState(s) {
+        const ser = function (u) { return u ? toBase64(u) : null; };
+        return {
+            rootKey: ser(s.rootKey),
+            sendingChainKey: ser(s.sendingChainKey),
+            receivingChainKey: ser(s.receivingChainKey),
+            dhSendingPrivate: ser(s.dhSendingPrivate),
+            dhSendingPublic: ser(s.dhSendingPublic),
+            dhReceivingPublic: ser(s.dhReceivingPublic),
+            sendMessageNumber: s.sendMessageNumber,
+            receiveMessageNumber: s.receiveMessageNumber,
+            previousSendingChainLength: s.previousSendingChainLength
+        };
+    }
+
+    function deserializeRatchetState(o) {
+        const de = function (b64) { return b64 ? fromBase64(b64) : null; };
+        return {
+            rootKey: de(o.rootKey),
+            sendingChainKey: de(o.sendingChainKey),
+            receivingChainKey: de(o.receivingChainKey),
+            dhSendingPrivate: de(o.dhSendingPrivate),
+            dhSendingPublic: de(o.dhSendingPublic),
+            dhReceivingPublic: de(o.dhReceivingPublic),
+            sendMessageNumber: o.sendMessageNumber,
+            receiveMessageNumber: o.receiveMessageNumber,
+            previousSendingChainLength: o.previousSendingChainLength
+        };
+    }
+
+    async function saveRatchetState(sessionId, state) {
+        await idbPut(RATCHET_STORE, sessionId, serializeRatchetState(state));
+    }
+
+    async function loadRatchetState(sessionId) {
+        const raw = await idbGet(RATCHET_STORE, sessionId);
+        return raw ? deserializeRatchetState(raw) : null;
+    }
+
+    async function encryptText(token, currentUserId, recipientUserId, plaintext) {
+        await sodium.ready;
+        const sessionId = (currentUserId + ':' + recipientUserId).toLowerCase();
+        const localBundle = await loadBundle(currentUserId);
+        if (!localBundle) {
+            throw new Error('No local key bundle - call ensureKeyBundlePublished first');
+        }
+
+        let state = await loadRatchetState(sessionId);
+        let x3dhMetadata = null;
+
+        if (!state) {
+            const remoteBundle = await apiGet(token, '/keys/' + recipientUserId);
+            if (!remoteBundle) {
+                throw new Error('Recipient has no published key bundle');
+            }
+            const x3dh = x3dhInitiate(localBundle, remoteBundle);
+            state = drInitInitiator(x3dh.sharedSecret, fromBase64(remoteBundle.spkPublic));
+            x3dhMetadata = x3dh.header;
+        }
+
+        const ad = buildAssociatedData(currentUserId, recipientUserId);
+        const enc = drEncrypt(state, new TextEncoder().encode(plaintext), ad);
+        await saveRatchetState(sessionId, state);
+
+        const drMeta = {
+            rk_pub: toBase64(enc.ratchetPublic),
+            pn: enc.previousChainLength,
+            n: enc.messageNumber
+        };
+        const metadataJson = x3dhMetadata
+            ? JSON.stringify({ x3dh: x3dhMetadata, dr: drMeta })
+            : JSON.stringify({ dr: drMeta });
+
+        return {
+            encryptedPayload: toBase64(enc.ciphertext),
+            encryptionAlgorithm: 'signal-protocol-v1',
+            keyEnvelope: sessionId,
+            metadataJson: metadataJson,
+            protocolVersion: 1
+        };
+    }
+
+    async function decryptMessage(currentUserId, message) {
+        try {
+            await sodium.ready;
+            if (message.protocolVersion === 2) {
+                return message.encryptedPayload;
+            }
+            if (message.protocolVersion === 0 || !message.metadataJson) {
+                return '[Unable to decrypt]';
+            }
+            const sessionId = (message.senderId + ':' + currentUserId).toLowerCase();
+            const meta = JSON.parse(message.metadataJson);
+            const localBundle = await loadBundle(currentUserId);
+            if (!localBundle || !meta.dr) {
+                return '[Unable to decrypt]';
+            }
+
+            let state = await loadRatchetState(sessionId);
+            if (meta.x3dh) {
+                const opkId = meta.x3dh.opk_id;
+                let opkPriv = null;
+                if (opkId && localBundle.otpPrivates) {
+                    const found = localBundle.otpPrivates.find(function (o) { return o.id === opkId; });
+                    if (found) {
+                        opkPriv = fromBase64(found.priv);
+                    }
+                }
+                const sharedSecret = x3dhRespond(localBundle, opkPriv, meta.x3dh);
+                state = drInitResponder(
+                    sharedSecret,
+                    fromBase64(localBundle.spkPrivate),
+                    fromBase64(localBundle.spkPublic));
+            }
+            if (!state) {
+                return '[Unable to decrypt]';
+            }
+
+            const ratchetPublic = fromBase64(meta.dr.rk_pub);
+            const ad = buildAssociatedData(message.senderId, currentUserId);
+            const ciphertext = fromBase64(message.encryptedPayload);
+            const plaintext = drDecrypt(state, ciphertext, ratchetPublic, meta.dr.pn, meta.dr.n, ad);
+            await saveRatchetState(sessionId, state);
+            return new TextDecoder().decode(plaintext);
+        } catch (err) {
+            console.error('[Crypto25519] decryptMessage failed:', err);
+            return '[Unable to decrypt]';
+        }
+    }
+
     window.Crypto25519 = {
         ensureKeyBundlePublished: ensureKeyBundlePublished,
         loadBundle: loadBundle,
+        encryptText: encryptText,
+        decryptMessage: decryptMessage,
         toBase64: toBase64,
         fromBase64: fromBase64,
         concat: concat,
@@ -234,6 +577,7 @@
         idbGet: idbGet,
         idbPut: idbPut,
         apiPost: apiPost,
+        apiGet: apiGet,
         openDb: openDb,
         getStores: getStores,
         API_BASE: API_BASE,

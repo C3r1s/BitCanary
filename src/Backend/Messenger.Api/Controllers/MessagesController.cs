@@ -12,7 +12,7 @@ namespace Messenger.Api.Controllers;
 public sealed class MessagesController(IMessageService messageService) : ControllerBase
 {
     [HttpPost]
-    public Task<MessageDto> SendMessage(SendMessageRequest request, CancellationToken cancellationToken)
+    public Task<MessageDto> SendMessage([FromBody] SendMessageRequest request, CancellationToken cancellationToken)
     {
         var command = new SendMessageCommand(
             request.ChatId,

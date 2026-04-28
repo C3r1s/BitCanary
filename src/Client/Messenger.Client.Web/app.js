@@ -39,7 +39,8 @@ async function api(endpoint, method = 'GET', body = null) {
     
     if (!response.ok) {
         const error = await response.json().catch(() => ({ message: 'Request failed' }));
-        throw new Error(error.message || `HTTP ${response.status}`);
+        console.error('API error', response.status, JSON.stringify(error));
+        throw new Error(error.message || error.title || `HTTP ${response.status}`);
     }
     
     return response.json();
@@ -184,16 +185,13 @@ async function sendMessage(text) {
     if (!text.trim() || !state.selectedChatId) return;
     
     const message = {
-        ChatId: state.selectedChatId,
-        ClientMessageId: crypto.randomUUID(),
-        Kind: 1,
-        EncryptedPayload: text,
-        EncryptionAlgorithm: 'None',
-        KeyEnvelope: null,
-        MediaId: null,
-        ReplyToMessageId: null,
-        MetadataJson: null,
-        ProtocolVersion: 0
+        chatId: state.selectedChatId,
+        clientMessageId: crypto.randomUUID(),
+        kind: 1,
+        encryptedPayload: text,
+        encryptionAlgorithm: 'None',
+        keyEnvelope: '',
+        protocolVersion: 2
     };
     
     try {

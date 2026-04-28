@@ -8,7 +8,7 @@ public sealed record SendMessageCommand(
     MessageKind Kind,
     string EncryptedPayload,
     string EncryptionAlgorithm,
-    string KeyEnvelope,
+    string? KeyEnvelope,
     Guid? MediaId,
     Guid? ReplyToMessageId,
     string? MetadataJson,

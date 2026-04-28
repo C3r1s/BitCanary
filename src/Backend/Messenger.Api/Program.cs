@@ -3,11 +3,19 @@ using Messenger.Api.Hubs;
 using Messenger.Api.Services;
 using Messenger.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddMessengerApi(builder.Configuration, builder.Environment);
+
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
 
 // CORS for web client — origins loaded from Cors:AllowedOrigins config (WEB-02)
 var allowedOrigins = builder.Configuration

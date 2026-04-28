@@ -84,7 +84,11 @@ public sealed class SendMessageCommandHandler(
 
         await dbContext.SaveChangesAsync(cancellationToken);
 
-        var dto = message.ToDto();
+        var savedMessage = await dbContext.Messages
+            .Include(m => m.Sender)
+            .SingleAsync(x => x.Id == message.Id, cancellationToken);
+
+        var dto = savedMessage.ToDto();
         await realtimeNotifier.BroadcastMessageAsync(dto, cancellationToken);
 
         return dto;

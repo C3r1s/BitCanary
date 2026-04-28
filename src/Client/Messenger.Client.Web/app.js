@@ -28,6 +28,23 @@ const elements = {
     messageInput: document.getElementById('message-input')
 };
 
+function getRecipientUserId(chat) {
+    if (!chat) return null;
+
+    const chatType = chat.chatType !== undefined ? chat.chatType : chat.type;
+    if (chatType !== undefined && chatType !== 0 && chatType !== 'Direct') {
+        return null;
+    }
+
+    if (chat.members && Array.isArray(chat.members)) {
+        const other = chat.members.find(function (m) { return m.userId !== state.userId; });
+        return other ? other.userId : null;
+    }
+    if (chat.otherUserId) return chat.otherUserId;
+    if (chat.peerUserId) return chat.peerUserId;
+    return null;
+}
+
 async function api(endpoint, method = 'GET', body = null) {
     const headers = { 'Content-Type': 'application/json' };
     if (state.token) headers['Authorization'] = `Bearer ${state.token}`;
@@ -137,6 +154,7 @@ async function loadMessages() {
     
     try {
         state.messages = await api(`/chats/${state.selectedChatId}/messages`);
+        await decryptAllMessages();
         renderMessages();
     } catch (error) {
         console.error('Failed to load messages:', error);
@@ -164,17 +182,30 @@ async function initSignalR() {
     }
 }
 
-function onMessageReceived(message) {
+async function onMessageReceived(message) {
     if (message.chatId === state.selectedChatId) {
         state.messages.push(message);
+        await decryptAllMessages();
         renderMessages();
     }
     loadChats();
 }
 
+async function decryptAllMessages() {
+    for (let i = 0; i < state.messages.length; i++) {
+        const msg = state.messages[i];
+        if (msg._plaintextCached !== undefined) continue;
+        if (msg.senderId === state.userId && msg.encryptionAlgorithm === 'signal-protocol-v1') {
+            msg._plaintextCached = '[sent]';
+            continue;
+        }
+        msg._plaintextCached = await window.Crypto25519.decryptMessage(state.userId, msg);
+    }
+}
+
 function renderMessages() {
     elements.messagesContainer.innerHTML = state.messages.map(msg => {
-        const text = msg.encryptedPayload || msg.plaintextBody || '[Unable to decrypt]';
+        const text = msg._plaintextCached !== undefined ? msg._plaintextCached : '[decrypting...]';
         const isOutgoing = msg.senderId === state.userId;
         return `
             <div class="message ${isOutgoing ? 'outgoing' : 'incoming'}">
@@ -190,21 +221,55 @@ function renderMessages() {
 
 async function sendMessage(text) {
     if (!text.trim() || !state.selectedChatId) return;
-    
-    const message = {
-        chatId: state.selectedChatId,
-        clientMessageId: crypto.randomUUID(),
-        kind: 1,
-        encryptedPayload: text,
-        encryptionAlgorithm: 'None',
-        keyEnvelope: '',
-        protocolVersion: 2
-    };
-    
+
+    const chat = state.chats.find(function (c) { return c.id === state.selectedChatId; });
+    const recipientUserId = getRecipientUserId(chat);
+    let payload;
+
+    if (recipientUserId) {
+        try {
+            const enc = await window.Crypto25519.encryptText(
+                state.token, state.userId, recipientUserId, text.trim());
+            payload = {
+                chatId: state.selectedChatId,
+                clientMessageId: crypto.randomUUID(),
+                kind: 1,
+                encryptedPayload: enc.encryptedPayload,
+                encryptionAlgorithm: enc.encryptionAlgorithm,
+                keyEnvelope: enc.keyEnvelope,
+                metadataJson: enc.metadataJson,
+                protocolVersion: 1
+            };
+        } catch (err) {
+            console.error('Encryption failed, falling back to plaintext:', err);
+            payload = {
+                chatId: state.selectedChatId,
+                clientMessageId: crypto.randomUUID(),
+                kind: 1,
+                encryptedPayload: text.trim(),
+                encryptionAlgorithm: 'plaintext',
+                keyEnvelope: '',
+                metadataJson: null,
+                protocolVersion: 2
+            };
+        }
+    } else {
+        console.warn('Group chat encryption not supported in web client yet (Phase 26).');
+        return;
+    }
+
     try {
-        await api('/messages', 'POST', message);
+        await api('/messages', 'POST', payload);
         elements.messageInput.value = '';
         await loadMessages();
+        for (let i = 0; i < state.messages.length; i++) {
+            const msg = state.messages[i];
+            if (msg.senderId === state.userId && msg._plaintextCached === undefined &&
+                msg.encryptionAlgorithm === 'signal-protocol-v1') {
+                msg._plaintextCached = '[sent]';
+            }
+        }
+        renderMessages();
         await loadChats();
     } catch (error) {
         console.error('Failed to send message:', error);

@@ -35,7 +35,7 @@ public sealed class MessagesControllerTests
         await controller.SendMessage(request, CancellationToken.None);
 
         capturedCommand.Should().NotBeNull();
-        capturedCommand!.ProtocolVersion.Should().Be(ProtocolVersion.LegacyAes);
+        capturedCommand!.ProtocolVersion.Should().Be(ProtocolVersion.SignalProtocol);
     }
 
     [Fact]

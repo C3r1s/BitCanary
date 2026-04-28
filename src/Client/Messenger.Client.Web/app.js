@@ -68,6 +68,13 @@ async function login(username, password) {
         
         showScreen(elements.mainScreen);
         elements.currentUser.textContent = `@${username}`;
+
+        try {
+            await window.Crypto25519.ensureKeyBundlePublished(state.token, state.userId);
+        } catch (err) {
+            console.error('Key bundle publication failed:', err);
+            // Non-fatal: chat UI remains usable and publication retries on next session restore.
+        }
         
         await loadChats();
         await initSignalR();
@@ -224,7 +231,7 @@ function formatTime(isoString) {
     return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
 }
 
-function checkSession() {
+async function checkSession() {
     const token = localStorage.getItem('bitcanary_token');
     const username = localStorage.getItem('bitcanary_user');
     const userId = localStorage.getItem('bitcanary_userid');
@@ -235,7 +242,13 @@ function checkSession() {
         state.userId = userId;
         showScreen(elements.mainScreen);
         elements.currentUser.textContent = `@${username}`;
-        loadChats().then(() => initSignalR());
+        try {
+            await window.Crypto25519.ensureKeyBundlePublished(state.token, state.userId);
+        } catch (err) {
+            console.error('Key bundle publication failed:', err);
+        }
+        await loadChats();
+        await initSignalR();
     }
 }
 
@@ -252,4 +265,7 @@ elements.messageForm.addEventListener('submit', async (e) => {
     await sendMessage(elements.messageInput.value);
 });
 
-checkSession();
+(async () => {
+    await sodium.ready;
+    await checkSession();
+})();

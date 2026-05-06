@@ -11,6 +11,7 @@ public sealed class KeyPublicationService(
     IKeyStore keyStore,
     ILocalCacheService localCacheService,
     IMessengerApiClient apiClient,
+    IClientSessionService sessionService,
     ILogger<KeyPublicationService> logger)
 {
     private const string DeviceIdCacheKey = "device-id";
@@ -25,6 +26,19 @@ public sealed class KeyPublicationService(
     private const int InitialOtpkCount = 20;
     private const int ReplenishOtpkCount = 20;
     private static readonly TimeSpan SpkRotationInterval = TimeSpan.FromDays(7);
+
+    private static readonly string[] AllKeySuffixes =
+    [
+        DeviceIdCacheKey,
+        IkPrivateCacheKey,
+        SpkPrivateCacheKey,
+        OtpPrivatesCacheKey,
+        OtpIdMapCacheKey,
+        SpkCreatedAtCacheKey,
+        IkPublicCacheKey,
+        SpkPublicCacheKey,
+        SpkSignatureCacheKey
+    ];
 
     private X3DHKeyBundle? _localBundle;
 
@@ -41,21 +55,74 @@ public sealed class KeyPublicationService(
 
     public async Task EnsureKeyBundlePublishedAsync(CancellationToken ct = default)
     {
+        if (!sessionService.IsAuthenticated)
+        {
+            return;
+        }
+
+        var userId = sessionService.CurrentUserId;
+        if (userId == Guid.Empty)
+        {
+            return;
+        }
+
         try
         {
-            var existingIkPriv = await localCacheService.LoadAsync<string>(IkPrivateCacheKey, ct);
+            var scopedIk = await localCacheService.LoadAsync<string>(UserKey(userId, IkPrivateCacheKey), ct);
+            if (scopedIk is not null)
+            {
+                await LoadBundleFromCacheAsync(userId, ct);
+                await EnsureLocalBundleIntegrityAsync(userId, ct);
+                await CheckSpkRotationAsync(userId, ct);
+                await EnsureLocalBundleIntegrityAsync(userId, ct);
+                await EnsureServerHasPublicBundleAsync(userId, ct);
+                return;
+            }
 
-            if (existingIkPriv is null)
+            var legacyIk = await localCacheService.LoadAsync<string>(LegacyKey(IkPrivateCacheKey), ct);
+            if (legacyIk is not null)
             {
-                await GenerateAndUploadBundleAsync(ct);
+                try
+                {
+                    await LoadBundleFromCacheLegacyAsync(ct);
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to read legacy key files; will discard and regenerate.");
+                    await DeleteLegacyKeyFilesAsync(ct);
+                    _localBundle = null;
+                    await GenerateAndUploadBundleAsync(userId, ct);
+                    return;
+                }
+
+                var remote = await apiClient.GetKeyBundleAsync(userId, ct);
+                var localIk = _localBundle!.IkPublic;
+                if (remote is not null && CryptographicOperations.FixedTimeEquals(remote.IkPublic, localIk))
+                {
+                    logger.LogInformation("Migrating legacy key cache to user-scoped files for user {UserId}.", userId);
+                    await CopyLegacyCacheToUserScopedAsync(userId, ct);
+                    await DeleteLegacyKeyFilesAsync(ct);
+                    await EnsureServerHasPublicBundleAsync(userId, ct);
+                    return;
+                }
+
+                if (remote is null)
+                {
+                    logger.LogInformation("Publishing legacy local keys to server (no key-bundle row yet) for user {UserId}.", userId);
+                    await EnsureServerHasPublicBundleAsync(userId, ct);
+                    await DeleteLegacyKeyFilesAsync(ct);
+                    return;
+                }
+
+                logger.LogWarning(
+                    "Discarding unscoped key cache (identity mismatch with server for user {UserId}). " +
+                    "This often happens after registering a second account on the same PC.",
+                    userId);
+                await DeleteLegacyKeyFilesAsync(ct);
+                _localBundle = null;
             }
-            else
-            {
-                await LoadBundleFromCacheAsync(ct);
-                await EnsureLocalBundleIntegrityAsync(ct);
-                await CheckSpkRotationAsync(ct);
-                await EnsureLocalBundleIntegrityAsync(ct);
-            }
+
+            await GenerateAndUploadBundleAsync(userId, ct);
         }
         catch (Exception ex)
         {
@@ -65,17 +132,23 @@ public sealed class KeyPublicationService(
 
     public async Task RegenerateAndPublishAsync(CancellationToken ct = default)
     {
+        var userId = sessionService.CurrentUserId;
+        if (userId == Guid.Empty)
+        {
+            throw new InvalidOperationException("Must be signed in to publish keys.");
+        }
+
         logger.LogInformation("Regenerating identity key and re-publishing bundle.");
 
         _localBundle = x3dh.GenerateKeyBundle();
         var otpKeys = x3dh.GenerateOneTimePreKeys(InitialOtpkCount);
 
-        await localCacheService.SaveAsync(IkPrivateCacheKey, keyStore.ProtectToBase64(_localBundle.IkPrivate), ct);
-        await localCacheService.SaveAsync(SpkPrivateCacheKey, keyStore.ProtectToBase64(_localBundle.SpkPrivate), ct);
-        await localCacheService.SaveAsync(IkPublicCacheKey, Convert.ToBase64String(_localBundle.IkPublic), ct);
-        await localCacheService.SaveAsync(SpkPublicCacheKey, Convert.ToBase64String(_localBundle.SpkPublic), ct);
-        await localCacheService.SaveAsync(SpkSignatureCacheKey, Convert.ToBase64String(_localBundle.SpkSignature), ct);
-        await localCacheService.SaveAsync(SpkCreatedAtCacheKey, _localBundle.SpkCreatedAt.ToString("O"), ct);
+        await localCacheService.SaveAsync(UserKey(userId, IkPrivateCacheKey), keyStore.ProtectToBase64(_localBundle.IkPrivate), ct);
+        await localCacheService.SaveAsync(UserKey(userId, SpkPrivateCacheKey), keyStore.ProtectToBase64(_localBundle.SpkPrivate), ct);
+        await localCacheService.SaveAsync(UserKey(userId, IkPublicCacheKey), Convert.ToBase64String(_localBundle.IkPublic), ct);
+        await localCacheService.SaveAsync(UserKey(userId, SpkPublicCacheKey), Convert.ToBase64String(_localBundle.SpkPublic), ct);
+        await localCacheService.SaveAsync(UserKey(userId, SpkSignatureCacheKey), Convert.ToBase64String(_localBundle.SpkSignature), ct);
+        await localCacheService.SaveAsync(UserKey(userId, SpkCreatedAtCacheKey), _localBundle.SpkCreatedAt.ToString("O"), ct);
 
         var resp = await apiClient.UploadKeyBundleAsync(
             new KeyBundleUploadRequest(
@@ -85,7 +158,7 @@ public sealed class KeyPublicationService(
                 _localBundle.SpkSignature),
             ct);
 
-        await localCacheService.SaveAsync(DeviceIdCacheKey, resp.DeviceId.ToString(), ct);
+        await localCacheService.SaveAsync(UserKey(userId, DeviceIdCacheKey), resp.DeviceId.ToString(), ct);
 
         var otpResp = await apiClient.ReplenishOtpksAsync(
             new OtpkReplenishRequest(resp.DeviceId, otpKeys.Select(k => k.Public).ToArray()), ct);
@@ -93,20 +166,26 @@ public sealed class KeyPublicationService(
         _otpPrivates = otpKeys.ToDictionary(
             k => Convert.ToBase64String(k.Public),
             k => keyStore.ProtectToBase64(k.Private));
-        await localCacheService.SaveAsync(OtpPrivatesCacheKey, _otpPrivates, ct);
+        await localCacheService.SaveAsync(UserKey(userId, OtpPrivatesCacheKey), _otpPrivates, ct);
 
         _otpById = new Dictionary<Guid, OtpKeyPair>();
         PopulateOtpById(otpResp.AssignedIds, otpKeys);
-        await PersistOtpIdMapAsync(ct);
+        await PersistOtpIdMapAsync(userId, ct);
 
         logger.LogInformation("Identity key regeneration complete. DeviceId={DeviceId}", resp.DeviceId);
     }
 
     public async Task ReplenishOtpksAsync(CancellationToken ct = default)
     {
+        var userId = sessionService.CurrentUserId;
+        if (userId == Guid.Empty)
+        {
+            return;
+        }
+
         try
         {
-            var deviceIdStr = await localCacheService.LoadAsync<string>(DeviceIdCacheKey, ct);
+            var deviceIdStr = await localCacheService.LoadAsync<string>(UserKey(userId, DeviceIdCacheKey), ct);
             if (deviceIdStr is null)
             {
                 logger.LogWarning("Cannot replenish OTPs — no device ID found in cache.");
@@ -124,10 +203,10 @@ public sealed class KeyPublicationService(
                 _otpPrivates[pubKey] = keyStore.ProtectToBase64(otp.Private);
             }
 
-            await localCacheService.SaveAsync(OtpPrivatesCacheKey, _otpPrivates, ct);
+            await localCacheService.SaveAsync(UserKey(userId, OtpPrivatesCacheKey), _otpPrivates, ct);
 
             PopulateOtpById(resp.AssignedIds, newOtps);
-            await PersistOtpIdMapAsync(ct);
+            await PersistOtpIdMapAsync(userId, ct);
 
             logger.LogInformation("OPK pool replenished with {Count} new keys.", ReplenishOtpkCount);
         }
@@ -137,8 +216,101 @@ public sealed class KeyPublicationService(
         }
     }
 
+    private static string UserKey(Guid userId, string suffix) => $"{userId:N}_{suffix}";
 
-    private async Task GenerateAndUploadBundleAsync(CancellationToken ct)
+    private static string LegacyKey(string suffix) => suffix;
+
+    private async Task EnsureServerHasPublicBundleAsync(Guid userId, CancellationToken ct)
+    {
+        if (_localBundle is null)
+        {
+            return;
+        }
+
+        var remote = await apiClient.GetKeyBundleAsync(userId, ct);
+        if (remote is not null)
+        {
+            return;
+        }
+
+        logger.LogWarning(
+            "Server has no key bundle for user {UserId} but local keys exist — publishing a new device row.",
+            userId);
+
+        var otpKeys = x3dh.GenerateOneTimePreKeys(InitialOtpkCount);
+        var resp = await apiClient.UploadKeyBundleAsync(
+            new KeyBundleUploadRequest(
+                null,
+                _localBundle.IkPublic,
+                _localBundle.SpkPublic,
+                _localBundle.SpkSignature),
+            ct);
+
+        var otpResp = await apiClient.ReplenishOtpksAsync(
+            new OtpkReplenishRequest(resp.DeviceId, otpKeys.Select(k => k.Public).ToArray()),
+            ct);
+
+        await localCacheService.SaveAsync(UserKey(userId, DeviceIdCacheKey), resp.DeviceId.ToString(), ct);
+
+        _otpPrivates = otpKeys.ToDictionary(
+            k => Convert.ToBase64String(k.Public),
+            k => keyStore.ProtectToBase64(k.Private));
+        await localCacheService.SaveAsync(UserKey(userId, OtpPrivatesCacheKey), _otpPrivates, ct);
+
+        _otpById = new Dictionary<Guid, OtpKeyPair>();
+        PopulateOtpById(otpResp.AssignedIds, otpKeys);
+        await PersistOtpIdMapAsync(userId, ct);
+        await PersistLocalBundleSecretsToScopedAsync(userId, ct);
+
+        logger.LogInformation("Re-published key bundle to server. DeviceId={DeviceId}", resp.DeviceId);
+    }
+
+    private async Task PersistLocalBundleSecretsToScopedAsync(Guid userId, CancellationToken ct)
+    {
+        if (_localBundle is null)
+        {
+            throw new InvalidOperationException("Local bundle is not loaded.");
+        }
+
+        await localCacheService.SaveAsync(UserKey(userId, IkPrivateCacheKey), keyStore.ProtectToBase64(_localBundle.IkPrivate), ct);
+        await localCacheService.SaveAsync(UserKey(userId, SpkPrivateCacheKey), keyStore.ProtectToBase64(_localBundle.SpkPrivate), ct);
+        await localCacheService.SaveAsync(UserKey(userId, IkPublicCacheKey), Convert.ToBase64String(_localBundle.IkPublic), ct);
+        await localCacheService.SaveAsync(UserKey(userId, SpkPublicCacheKey), Convert.ToBase64String(_localBundle.SpkPublic), ct);
+        await localCacheService.SaveAsync(UserKey(userId, SpkSignatureCacheKey), Convert.ToBase64String(_localBundle.SpkSignature), ct);
+        await localCacheService.SaveAsync(UserKey(userId, SpkCreatedAtCacheKey), _localBundle.SpkCreatedAt.ToString("O"), ct);
+    }
+
+    private async Task CopyLegacyCacheToUserScopedAsync(Guid userId, CancellationToken ct)
+    {
+        await CopyIfPresentAsync<string>(userId, DeviceIdCacheKey, ct);
+        await CopyIfPresentAsync<string>(userId, IkPrivateCacheKey, ct);
+        await CopyIfPresentAsync<string>(userId, SpkPrivateCacheKey, ct);
+        await CopyIfPresentAsync<string>(userId, IkPublicCacheKey, ct);
+        await CopyIfPresentAsync<string>(userId, SpkPublicCacheKey, ct);
+        await CopyIfPresentAsync<string>(userId, SpkSignatureCacheKey, ct);
+        await CopyIfPresentAsync<string>(userId, SpkCreatedAtCacheKey, ct);
+        await CopyIfPresentAsync<Dictionary<string, string>>(userId, OtpPrivatesCacheKey, ct);
+        await CopyIfPresentAsync<Dictionary<string, string>>(userId, OtpIdMapCacheKey, ct);
+    }
+
+    private async Task CopyIfPresentAsync<T>(Guid userId, string suffix, CancellationToken ct) where T : class
+    {
+        var data = await localCacheService.LoadAsync<T>(LegacyKey(suffix), ct);
+        if (data is not null)
+        {
+            await localCacheService.SaveAsync(UserKey(userId, suffix), data, ct);
+        }
+    }
+
+    private async Task DeleteLegacyKeyFilesAsync(CancellationToken ct)
+    {
+        foreach (var suffix in AllKeySuffixes)
+        {
+            await localCacheService.DeleteAsync(LegacyKey(suffix), ct);
+        }
+    }
+
+    private async Task GenerateAndUploadBundleAsync(Guid userId, CancellationToken ct)
     {
         logger.LogInformation("No local key bundle found — generating new bundle.");
 
@@ -157,39 +329,41 @@ public sealed class KeyPublicationService(
             new OtpkReplenishRequest(resp.DeviceId, otpKeys.Select(k => k.Public).ToArray()),
             ct);
 
-        await localCacheService.SaveAsync(DeviceIdCacheKey, resp.DeviceId.ToString(), ct);
-
-        await localCacheService.SaveAsync(IkPrivateCacheKey, keyStore.ProtectToBase64(_localBundle.IkPrivate), ct);
-        await localCacheService.SaveAsync(SpkPrivateCacheKey, keyStore.ProtectToBase64(_localBundle.SpkPrivate), ct);
-        await localCacheService.SaveAsync(IkPublicCacheKey, Convert.ToBase64String(_localBundle.IkPublic), ct);
-        await localCacheService.SaveAsync(SpkPublicCacheKey, Convert.ToBase64String(_localBundle.SpkPublic), ct);
-        await localCacheService.SaveAsync(SpkSignatureCacheKey, Convert.ToBase64String(_localBundle.SpkSignature), ct);
-        await localCacheService.SaveAsync(SpkCreatedAtCacheKey, _localBundle.SpkCreatedAt.ToString("O"), ct);
+        await localCacheService.SaveAsync(UserKey(userId, DeviceIdCacheKey), resp.DeviceId.ToString(), ct);
 
         _otpPrivates = otpKeys.ToDictionary(
             k => Convert.ToBase64String(k.Public),
             k => keyStore.ProtectToBase64(k.Private));
-        await localCacheService.SaveAsync(OtpPrivatesCacheKey, _otpPrivates, ct);
+        await localCacheService.SaveAsync(UserKey(userId, OtpPrivatesCacheKey), _otpPrivates, ct);
 
         PopulateOtpById(otpResp.AssignedIds, otpKeys);
-        await PersistOtpIdMapAsync(ct);
+        await PersistOtpIdMapAsync(userId, ct);
+        await PersistLocalBundleSecretsToScopedAsync(userId, ct);
 
         logger.LogInformation("Key bundle published. DeviceId={DeviceId}", resp.DeviceId);
     }
 
-    private async Task LoadBundleFromCacheAsync(CancellationToken ct)
+    private async Task LoadBundleFromCacheAsync(Guid userId, CancellationToken ct) =>
+        await LoadBundleFromCacheCoreAsync(
+            suffix => UserKey(userId, suffix),
+            ct);
+
+    private async Task LoadBundleFromCacheLegacyAsync(CancellationToken ct) =>
+        await LoadBundleFromCacheCoreAsync(LegacyKey, ct);
+
+    private async Task LoadBundleFromCacheCoreAsync(Func<string, string> key, CancellationToken ct)
     {
-        var ikPrivDpapi = await localCacheService.LoadAsync<string>(IkPrivateCacheKey, ct)
+        var ikPrivDpapi = await localCacheService.LoadAsync<string>(key(IkPrivateCacheKey), ct)
                           ?? throw new InvalidOperationException("IK private key missing from cache.");
-        var spkPrivDpapi = await localCacheService.LoadAsync<string>(SpkPrivateCacheKey, ct)
+        var spkPrivDpapi = await localCacheService.LoadAsync<string>(key(SpkPrivateCacheKey), ct)
                            ?? throw new InvalidOperationException("SPK private key missing from cache.");
-        var ikPubB64 = await localCacheService.LoadAsync<string>(IkPublicCacheKey, ct)
+        var ikPubB64 = await localCacheService.LoadAsync<string>(key(IkPublicCacheKey), ct)
                        ?? throw new InvalidOperationException("IK public key missing from cache.");
-        var spkPubB64 = await localCacheService.LoadAsync<string>(SpkPublicCacheKey, ct)
+        var spkPubB64 = await localCacheService.LoadAsync<string>(key(SpkPublicCacheKey), ct)
                         ?? throw new InvalidOperationException("SPK public key missing from cache.");
-        var spkSigB64 = await localCacheService.LoadAsync<string>(SpkSignatureCacheKey, ct)
+        var spkSigB64 = await localCacheService.LoadAsync<string>(key(SpkSignatureCacheKey), ct)
                         ?? throw new InvalidOperationException("SPK signature missing from cache.");
-        var spkCreatedAtStr = await localCacheService.LoadAsync<string>(SpkCreatedAtCacheKey, ct)
+        var spkCreatedAtStr = await localCacheService.LoadAsync<string>(key(SpkCreatedAtCacheKey), ct)
                               ?? throw new InvalidOperationException("SPK creation time missing from cache.");
 
         _localBundle = new X3DHKeyBundle(
@@ -200,11 +374,11 @@ public sealed class KeyPublicationService(
             SpkSignature: Convert.FromBase64String(spkSigB64),
             SpkCreatedAt: DateTimeOffset.Parse(spkCreatedAtStr));
 
-        _otpPrivates = await localCacheService.LoadAsync<Dictionary<string, string>>(OtpPrivatesCacheKey, ct)
+        _otpPrivates = await localCacheService.LoadAsync<Dictionary<string, string>>(key(OtpPrivatesCacheKey), ct)
                        ?? new Dictionary<string, string>();
 
         _otpById = new Dictionary<Guid, OtpKeyPair>();
-        var otpIdMap = await localCacheService.LoadAsync<Dictionary<string, string>>(OtpIdMapCacheKey, ct);
+        var otpIdMap = await localCacheService.LoadAsync<Dictionary<string, string>>(key(OtpIdMapCacheKey), ct);
         if (otpIdMap is not null)
         {
             foreach (var (guidStr, pubKeyB64) in otpIdMap)
@@ -229,15 +403,15 @@ public sealed class KeyPublicationService(
         }
     }
 
-    private async Task PersistOtpIdMapAsync(CancellationToken ct)
+    private async Task PersistOtpIdMapAsync(Guid userId, CancellationToken ct)
     {
         var map = _otpById.ToDictionary(
             kvp => kvp.Key.ToString(),
             kvp => Convert.ToBase64String(kvp.Value.Public));
-        await localCacheService.SaveAsync(OtpIdMapCacheKey, map, ct);
+        await localCacheService.SaveAsync(UserKey(userId, OtpIdMapCacheKey), map, ct);
     }
 
-    private async Task CheckSpkRotationAsync(CancellationToken ct)
+    private async Task CheckSpkRotationAsync(Guid userId, CancellationToken ct)
     {
         if (_localBundle is null) return;
 
@@ -248,7 +422,7 @@ public sealed class KeyPublicationService(
 
         logger.LogInformation("SPK is older than 7 days — rotating.");
 
-        var deviceIdStr = await localCacheService.LoadAsync<string>(DeviceIdCacheKey, ct);
+        var deviceIdStr = await localCacheService.LoadAsync<string>(UserKey(userId, DeviceIdCacheKey), ct);
         if (deviceIdStr is null)
         {
             logger.LogWarning("Cannot rotate SPK — no device ID found in cache.");
@@ -276,15 +450,15 @@ public sealed class KeyPublicationService(
             ct);
 
         _localBundle = rotated;
-        await localCacheService.SaveAsync(SpkPrivateCacheKey, keyStore.ProtectToBase64(rotated.SpkPrivate), ct);
-        await localCacheService.SaveAsync(SpkPublicCacheKey, Convert.ToBase64String(rotated.SpkPublic), ct);
-        await localCacheService.SaveAsync(SpkSignatureCacheKey, Convert.ToBase64String(rotated.SpkSignature), ct);
-        await localCacheService.SaveAsync(SpkCreatedAtCacheKey, rotated.SpkCreatedAt.ToString("O"), ct);
+        await localCacheService.SaveAsync(UserKey(userId, SpkPrivateCacheKey), keyStore.ProtectToBase64(rotated.SpkPrivate), ct);
+        await localCacheService.SaveAsync(UserKey(userId, SpkPublicCacheKey), Convert.ToBase64String(rotated.SpkPublic), ct);
+        await localCacheService.SaveAsync(UserKey(userId, SpkSignatureCacheKey), Convert.ToBase64String(rotated.SpkSignature), ct);
+        await localCacheService.SaveAsync(UserKey(userId, SpkCreatedAtCacheKey), rotated.SpkCreatedAt.ToString("O"), ct);
 
         logger.LogInformation("SPK rotation complete.");
     }
 
-    private async Task EnsureLocalBundleIntegrityAsync(CancellationToken ct)
+    private async Task EnsureLocalBundleIntegrityAsync(Guid userId, CancellationToken ct)
     {
         if (_localBundle is null)
         {

@@ -218,6 +218,108 @@ function getChatSubtitle(chat) {
     return n ? `group · ${n} members` : 'group channel';
 }
 
+function getLastMessageDto(chat) {
+    if (!chat) return null;
+    return chat.lastMessage || chat.LastMessage || null;
+}
+
+function truncatePreview(text, maxLen) {
+    maxLen = maxLen || 100;
+    const s = String(text || '').replace(/\s+/g, ' ').trim();
+    if (!s.length) return '';
+    if (s.length <= maxLen) return s;
+    return s.slice(0, maxLen - 1) + '\u2026';
+}
+
+function formatPreviewForKind(kind, plaintext) {
+    const k = Number(kind);
+    if (k === 2) {
+        const t = String(plaintext || '').trim();
+        return t ? '\ud83d\udcf7 ' + t : '\ud83d\udcf7 Image';
+    }
+    return String(plaintext || '');
+}
+
+function isEncryptedProtocolMessage(msg) {
+    if (!msg) return false;
+    const pv = msg.protocolVersion !== undefined ? msg.protocolVersion : msg.ProtocolVersion;
+    const alg = msg.encryptionAlgorithm || msg.EncryptionAlgorithm || '';
+    return pv === 1 || pv === '1' || pv === 3 || pv === '3' ||
+        alg === 'signal-protocol-v1' || alg === 'noise-xx-dr-v1';
+}
+
+async function computeChatListPreview(chat) {
+    const lm = getLastMessageDto(chat);
+    if (!lm) {
+        chat._listPreviewText = '';
+        return;
+    }
+    if (!state.userId || !state.token) {
+        chat._listPreviewText = '';
+        return;
+    }
+
+    const kind = lm.kind !== undefined ? lm.kind : lm.Kind;
+    const senderId = lm.senderId || lm.SenderId;
+    const pv = lm.protocolVersion !== undefined ? lm.protocolVersion : lm.ProtocolVersion;
+    const encPayload = lm.encryptedPayload || lm.EncryptedPayload || '';
+
+    if (pv === 2 || pv === '2') {
+        chat._listPreviewText = truncatePreview(formatPreviewForKind(kind, encPayload));
+        return;
+    }
+
+    if (normalizeId(senderId) === normalizeId(state.userId)) {
+        const mid = lm.id || lm.Id;
+        const idStr = mid ? String(mid) : '';
+        const fromMap = idStr ? sentPlaintextByMessageId.get(idStr) : null;
+        if (fromMap) {
+            chat._listPreviewText = truncatePreview(formatPreviewForKind(kind, fromMap));
+            return;
+        }
+        chat._listPreviewText = truncatePreview(formatPreviewForKind(kind, Number(kind) === 2 ? '' : '[Sent]'));
+        return;
+    }
+
+    let text = await window.Crypto25519.decryptMessage(state.userId, lm, state.token);
+    if (text === '[Unable to decrypt]' && isEncryptedProtocolMessage(lm)) {
+        text = await window.Crypto25519.decryptMessage(state.userId, lm, state.token);
+    }
+    chat._listPreviewText = truncatePreview(
+        text === '[Unable to decrypt]'
+            ? '[Unable to decrypt]'
+            : formatPreviewForKind(kind, text)
+    );
+}
+
+function getChatListFilterPreviewLower(chat) {
+    const fromDecrypt = chat._listPreviewText;
+    if (fromDecrypt) return String(fromDecrypt).toLowerCase();
+    const lm = getLastMessageDto(chat);
+    return String(lm && (lm.encryptedPayload || lm.EncryptedPayload) || '').toLowerCase();
+}
+
+function syncChatPreviewWithDecryptedThread(chatId, messages) {
+    const chat = state.chats.find(function (c) { return c.id === chatId; });
+    if (!chat || !messages || messages.length === 0) return;
+    const summaryLm = getLastMessageDto(chat);
+    const summaryLastId = summaryLm && (summaryLm.id || summaryLm.Id)
+        ? String(summaryLm.id || summaryLm.Id)
+        : null;
+    const ordered = messages.slice().sort(function (a, b) {
+        const aTs = new Date(a.createdAtUtc || a.CreatedAtUtc || 0).getTime();
+        const bTs = new Date(b.createdAtUtc || b.CreatedAtUtc || 0).getTime();
+        if (aTs === bTs) return 0;
+        return aTs - bTs;
+    });
+    const last = ordered[ordered.length - 1];
+    const threadLastId = last && (last.id || last.Id) ? String(last.id || last.Id) : null;
+    if (summaryLastId && threadLastId && summaryLastId !== threadLastId) return;
+    if (last._plaintextCached === undefined) return;
+    const kind = last.kind !== undefined ? last.kind : last.Kind;
+    chat._listPreviewText = truncatePreview(formatPreviewForKind(kind, last._plaintextCached));
+}
+
 /** @returns {1|2|3} ChatRole: Owner=1, Admin=2, Member=3 */
 function parseChatRole(role) {
     const n = Number(role);
@@ -1171,7 +1273,27 @@ async function logout() {
 
 async function loadChats() {
     try {
+        const prev = new Map();
+        state.chats.forEach(function (c) {
+            const lm = getLastMessageDto(c);
+            const lid = lm && (lm.id || lm.Id) ? String(lm.id || lm.Id) : null;
+            prev.set(c.id, { lastId: lid, preview: c._listPreviewText });
+        });
+
         state.chats = await api('/chats');
+
+        for (let i = 0; i < state.chats.length; i++) {
+            const chat = state.chats[i];
+            const lm = getLastMessageDto(chat);
+            const newId = lm && (lm.id || lm.Id) ? String(lm.id || lm.Id) : null;
+            const oldEnt = prev.get(chat.id);
+            if (oldEnt && oldEnt.lastId === newId && oldEnt.preview) {
+                chat._listPreviewText = oldEnt.preview;
+            } else {
+                await computeChatListPreview(chat);
+            }
+        }
+
         renderChats();
         if (state.selectedChatId && !state.chats.some(function (c) { return c.id === state.selectedChatId; })) {
             state.selectedChatId = null;
@@ -1193,21 +1315,29 @@ function renderChats() {
         ? state.chats
         : state.chats.filter(function (chat) {
             const title = String(chat.title || '').toLowerCase();
-            const preview = String(chat.lastMessage && (chat.lastMessage.encryptedPayload || chat.lastMessage.EncryptedPayload) || '').toLowerCase();
+            const preview = getChatListFilterPreviewLower(chat);
             return title.includes(filter) || preview.includes(filter);
         });
 
-    elements.chatsContainer.innerHTML = list.map(chat => `
+    elements.chatsContainer.innerHTML = list.map(chat => {
+        const lm = getLastMessageDto(chat);
+        const previewText = chat._listPreviewText !== undefined && chat._listPreviewText !== null
+            ? chat._listPreviewText
+            : (lm && (lm.encryptedPayload || lm.EncryptedPayload)
+                ? '\u2026'
+                : '');
+        return `
         <div class="chat-item ${chat.id === state.selectedChatId ? 'active' : ''}" data-id="${chat.id}">
             <div class="chat-item-main">
                 <div class="title">${escapeHtml(chat.title)}</div>
-                <div class="preview">${escapeHtml(chat.lastMessage?.encryptedPayload || '')}</div>
+                <div class="preview">${escapeHtml(previewText)}</div>
             </div>
             <div class="chat-item-meta">
-                <div class="time">${formatTime(chat.lastMessage?.createdAtUtc)}</div>
+                <div class="time">${formatTime(lm && (lm.createdAtUtc || lm.CreatedAtUtc))}</div>
             </div>
         </div>
-    `).join('');
+    `;
+    }).join('');
     
     elements.chatsContainer.querySelectorAll('.chat-item').forEach(item => {
         item.addEventListener('click', () => selectChat(item.dataset.id));
@@ -1394,7 +1524,7 @@ async function onMessageReceived(message) {
         renderMessages();
         await markCurrentChatRead();
     }
-    loadChats();
+    await loadChats();
 }
 
 async function decryptAllMessages() {
@@ -1443,6 +1573,11 @@ async function decryptAllMessages() {
             const hint = getMetadataHints(msg);
             pushDecryptLog(`message=${msg.id || 'n/a'} sender=${msg.senderId || 'n/a'} chat=${msg.chatId || state.selectedChatId} phase=retry keyEnvelope=${msg.keyEnvelope || 'n/a'} pv=${msg.protocolVersion || 'n/a'} hasNoise=${hint.hasNoise} n=${hint.n ?? 'n/a'} pn=${hint.pn ?? 'n/a'}`);
         }
+    }
+
+    if (state.selectedChatId) {
+        syncChatPreviewWithDecryptedThread(state.selectedChatId, state.messages);
+        renderChats();
     }
 }
 

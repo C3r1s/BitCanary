@@ -12,10 +12,47 @@ public partial class SearchResultsView : UserControl
     private TextBox? _searchQueryBox;
     private ListBox? _resultsList;
     private ListBox? _userResultsList;
+    private SearchViewModel? _attachedSearchVm;
 
     public SearchResultsView()
     {
         InitializeComponent();
+        DataContextChanged += OnSearchDataContextChanged;
+    }
+
+    private void OnSearchDataContextChanged(object? sender, EventArgs e)
+    {
+        DetachSearchViewModel();
+        if (DataContext is SearchViewModel svm)
+        {
+            _attachedSearchVm = svm;
+            svm.BeforeSearchCollectionsMutation += OnBeforeSearchCollectionsMutation;
+        }
+    }
+
+    private void DetachSearchViewModel()
+    {
+        if (_attachedSearchVm is not null)
+        {
+            _attachedSearchVm.BeforeSearchCollectionsMutation -= OnBeforeSearchCollectionsMutation;
+            _attachedSearchVm = null;
+        }
+    }
+
+    private void OnBeforeSearchCollectionsMutation(object? sender, EventArgs e)
+    {
+        var results = _resultsList ?? this.FindControl<ListBox>("ResultsList");
+        var users = _userResultsList ?? this.FindControl<ListBox>("UserResultsList");
+        if (results is not null)
+            results.SelectedItem = null;
+        if (users is not null)
+            users.SelectedItem = null;
+    }
+
+    protected override void OnUnloaded(RoutedEventArgs e)
+    {
+        DetachSearchViewModel();
+        base.OnUnloaded(e);
     }
 
     protected override void OnLoaded(RoutedEventArgs e)

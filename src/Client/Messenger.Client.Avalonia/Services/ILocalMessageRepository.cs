@@ -7,6 +7,7 @@ namespace Messenger.Client.Avalonia.Services;
 public interface ILocalMessageRepository
 {
     Task SaveMessageAsync(MessageDto message, int protocolVersion = 0, CancellationToken cancellationToken = default);
+    Task ReplaceChatMessagesAsync(Guid chatId, IReadOnlyList<MessageDto> messages, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MessageDto>> GetMessagesAsync(Guid chatId, CancellationToken cancellationToken = default);
     Task<bool> MessageExistsAsync(Guid clientMessageId, CancellationToken cancellationToken = default);
 

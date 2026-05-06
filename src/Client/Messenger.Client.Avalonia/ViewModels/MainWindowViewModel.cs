@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Net.Sockets;
 using System.Security.Cryptography;
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Media.Imaging;
@@ -15,6 +16,7 @@ using Messenger.Client.Avalonia.Services.Crypto;
 using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
 using Messenger.Shared.Contracts.Realtime;
+using Microsoft.AspNetCore.SignalR;
 using SearchResult = Messenger.Client.Avalonia.Services.SearchResult;
 
 namespace Messenger.Client.Avalonia.ViewModels;
@@ -42,6 +44,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly Dictionary<Guid, ChatSummaryDto> _chatSummaryCache = new();
     private readonly HashSet<Guid> _deletedChatIds = new();
     private readonly Dictionary<Guid, DateTimeOffset> _clearedChats = new();
+
+    /// <summary>Increments on each chat load so in-flight loads can abort after <see cref="ChatList.SelectedChat"/> changes.</summary>
+    private int _loadSelectedChatVersion;
+
+    private Guid? _pendingScrollToMessageId;
 
     [ObservableProperty]
     private string _statusMessage = "Loading local cache...";
@@ -380,13 +387,38 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private void NavigateToSearchResult(SearchResultItemViewModel result)
     {
         ChatList.IsSearchMode = false;
+        _pendingScrollToMessageId = result.MessageId;
         ChatList.Search?.Reset();
 
         var chatItem = ChatList.Chats.FirstOrDefault(c => c.Id == result.ChatId);
         if (chatItem is not null)
         {
             ChatList.SelectedChat = chatItem;
+            return;
         }
+
+        _ = NavigateToSearchResultWithRefreshAsync(result.ChatId);
+    }
+
+    private async Task NavigateToSearchResultWithRefreshAsync(Guid chatId)
+    {
+        try
+        {
+            await RefreshRemoteDataAsync();
+        }
+        catch
+        {
+            /* ignore — chat may still be missing */
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            var chatItem = ChatList.Chats.FirstOrDefault(c => c.Id == chatId);
+            if (chatItem is not null)
+                ChatList.SelectedChat = chatItem;
+            else
+                _pendingScrollToMessageId = null;
+        });
     }
 
     private async Task HandleUserSelectedAsync(UserProfileDto selectedUser)
@@ -423,7 +455,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 Title: selectedUser.DisplayName,
                 Type: Messenger.Shared.Contracts.ChatType.Direct,
                 Description: null,
-                MemberIds: new[] { _sessionService.CurrentUserId, selectedUser.Id });
+                MemberIds: new[] { selectedUser.Id });
 
             var newChat = await _apiClient.CreateChatAsync(request);
 
@@ -497,6 +529,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _chatSummaryCache.Clear();
         _deletedChatIds.Clear();
         _clearedChats.Clear();
+        _sentPlaintextByMessageId.Clear();
 
         _ = _localCacheService.SaveAsync(ChatsKey(userId), Array.Empty<ChatSummaryDto>());
         IsLoggedIn = false;
@@ -681,7 +714,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             try
             {
                 var messages = await _apiClient.GetMessagesAsync(chat.Id);
-                foreach (var msg in messages)
+                var list = messages.ToList();
+                await _localMessageRepository.ReplaceChatMessagesAsync(chat.Id, list);
+                foreach (var msg in list)
                 {
                     try { await _encryptionService.DecryptAsync(msg); }
                     catch {  }
@@ -691,8 +726,41 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    private bool IsChatLoadSuperseded(int version, Guid expectedChatId) =>
+        version != Volatile.Read(ref _loadSelectedChatVersion)
+        || ChatList.SelectedChat?.Id != expectedChatId;
+
+    /// <summary>
+    /// JoinChat can fail with "not a member" if the chat list was refreshed while a load was in flight
+    /// (stale selection) or membership just appeared — refresh chats once and retry.
+    /// </summary>
+    private async Task TryJoinChatWithRecoveryAsync(int version, Guid chatId, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await _realtimeClient.JoinChatAsync(chatId, cancellationToken);
+        }
+        catch (HubException ex) when (ex.Message.Contains("not a member", StringComparison.OrdinalIgnoreCase))
+        {
+            System.Diagnostics.Debug.WriteLine($"[TryJoinChatWithRecoveryAsync] first JoinChat failed: {ex}");
+            if (IsChatLoadSuperseded(version, chatId))
+            {
+                throw;
+            }
+
+            await RefreshRemoteDataAsync();
+            if (IsChatLoadSuperseded(version, chatId))
+            {
+                throw;
+            }
+
+            await _realtimeClient.JoinChatAsync(chatId, cancellationToken);
+        }
+    }
+
     private async Task LoadSelectedChatAsync()
     {
+        var version = Interlocked.Increment(ref _loadSelectedChatVersion);
         var selectedChat = ChatList.SelectedChat;
         ChatWindow.Messages.Clear();
         ChatWindow.IsUnverified = false;
@@ -700,12 +768,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         if (selectedChat is null)
         {
+            _pendingScrollToMessageId = null;
             ChatWindow.Title = "Select a chat";
             ChatWindow.Subtitle = "Choose a conversation to view encrypted history.";
             ChatWindow.IsSessionVerified = false;
             MessageInput.NotifyBlockStateChanged();
             return;
         }
+
+        var lockedChatId = selectedChat.Id;
+        var chatTitle = selectedChat.Title;
 
         ChatWindow.Title = selectedChat.Title;
         ChatWindow.IsGroupChat = selectedChat.IsGroupChat;
@@ -723,17 +795,26 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             ChatWindow.IsGroupInfoVisible = false;
         }
 
-        StatusMessage = $"Loading {selectedChat.Title}...";
+        StatusMessage = $"Loading {chatTitle}...";
 
         selectedChat.UnreadCount = 0;
-        await _localMessageRepository.ResetUnreadCountAsync(selectedChat.Id);
+        await _localMessageRepository.ResetUnreadCountAsync(lockedChatId);
+        if (IsChatLoadSuperseded(version, lockedChatId))
+        {
+            return;
+        }
 
         if (selectedChat.Type == ChatType.Direct)
         {
-            var sessionId = GetCurrentSessionId();
+            var sessionId = GetSessionIdForDirectChat(selectedChat);
             if (!string.IsNullOrEmpty(sessionId))
             {
                 var verified = await TryAutoVerifyDirectChatAsync(selectedChat, sessionId);
+                if (IsChatLoadSuperseded(version, lockedChatId))
+                {
+                    return;
+                }
+
                 ChatWindow.IsSessionVerified = verified;
 
                 MessageInput.IsBlockedForKeyVerification = _blockedSessions.Contains(sessionId);
@@ -752,54 +833,119 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         MessageInput.NotifyBlockStateChanged();
 
-        var cacheKey = GetMessageCacheKey(selectedChat.Id);
+        var cacheKey = GetMessageCacheKey(lockedChatId);
         var cachedMessages = await _localCacheService.LoadAsync<IReadOnlyCollection<MessageDto>>(cacheKey);
         if (cachedMessages is not null)
         {
-            var filtered = _clearedChats.TryGetValue(selectedChat.Id, out var clearedAt)
+            if (IsChatLoadSuperseded(version, lockedChatId))
+            {
+                return;
+            }
+
+            var filtered = _clearedChats.TryGetValue(lockedChatId, out var clearedAt)
                 ? cachedMessages.Where(m => m.CreatedAtUtc > clearedAt).ToList()
-                : cachedMessages;
-            await ReplaceMessagesAsync(selectedChat.Id, filtered);
+                : cachedMessages.ToList();
+            await _localMessageRepository.ReplaceChatMessagesAsync(lockedChatId, filtered);
+            await ReplaceMessagesAsync(lockedChatId, filtered);
+            if (!_sessionService.IsAuthenticated && !IsChatLoadSuperseded(version, lockedChatId))
+                await TryCompleteSearchNavigationAsync(version, lockedChatId);
         }
 
         if (_sessionService.IsAuthenticated)
         {
             try
             {
-                var messages = await _apiClient.GetMessagesAsync(selectedChat.Id);
-                var filteredMessages = _clearedChats.TryGetValue(selectedChat.Id, out var clearedAt)
-                    ? messages.Where(m => m.CreatedAtUtc > clearedAt).ToList()
-                    : (IReadOnlyCollection<MessageDto>)messages;
-                await ReplaceMessagesAsync(selectedChat.Id, filteredMessages);
+                if (IsChatLoadSuperseded(version, lockedChatId))
+                {
+                    return;
+                }
+
+                var messages = await _apiClient.GetMessagesAsync(lockedChatId);
+                if (IsChatLoadSuperseded(version, lockedChatId))
+                {
+                    return;
+                }
+
+                var filteredMessages = _clearedChats.TryGetValue(lockedChatId, out var clearedAt2)
+                    ? messages.Where(m => m.CreatedAtUtc > clearedAt2).ToList()
+                    : messages.ToList();
+                await _localMessageRepository.ReplaceChatMessagesAsync(lockedChatId, filteredMessages);
+                await ReplaceMessagesAsync(lockedChatId, filteredMessages);
+                if (!IsChatLoadSuperseded(version, lockedChatId))
+                    await TryCompleteSearchNavigationAsync(version, lockedChatId);
+                if (IsChatLoadSuperseded(version, lockedChatId))
+                {
+                    return;
+                }
+
                 await _localCacheService.SaveAsync(cacheKey, filteredMessages);
-                await _realtimeClient.JoinChatAsync(selectedChat.Id);
-                await _realtimeClient.SendReadReceiptAsync(selectedChat.Id);
+                if (IsChatLoadSuperseded(version, lockedChatId))
+                {
+                    return;
+                }
+
+                await TryJoinChatWithRecoveryAsync(version, lockedChatId);
+                if (IsChatLoadSuperseded(version, lockedChatId))
+                {
+                    return;
+                }
+
+                await _realtimeClient.SendReadReceiptAsync(lockedChatId);
 
                 if (selectedChat.IsGroupChat && ChatWindow.GroupInfo is not null)
                 {
-                    _chatSummaryCache.TryGetValue(selectedChat.Id, out var summary);
+                    _chatSummaryCache.TryGetValue(lockedChatId, out var summary);
                     if (summary is not null)
+                    {
                         await ChatWindow.GroupInfo.LoadAsync(summary, _sessionService.CurrentUserId);
+                    }
                 }
 
-                StatusMessage = $"{selectedChat.Title} ready.";
+                StatusMessage = $"{chatTitle} ready.";
             }
             catch (Exception ex) when (ex is System.Net.Http.HttpRequestException
                                            or SocketException
                                            or TaskCanceledException
                                            or OperationCanceledException)
             {
-                StatusMessage = $"{selectedChat.Title} (offline — showing cached messages)";
+                StatusMessage = $"{chatTitle} (offline — showing cached messages)";
+                if (!IsChatLoadSuperseded(version, lockedChatId))
+                    await TryCompleteSearchNavigationAsync(version, lockedChatId);
             }
-            catch (Microsoft.AspNetCore.SignalR.HubException ex)
+            catch (HubException ex)
             {
-                StatusMessage = $"{selectedChat.Title} ready (sync issue: {ex.Message})";
+                System.Diagnostics.Debug.WriteLine($"[LoadSelectedChatAsync] HubException (full): {ex}");
+                var detail = ex.InnerException is not null
+                    ? $"{ex.Message} — {ex.InnerException.Message}"
+                    : ex.Message;
+                StatusMessage = $"{chatTitle} ready (sync issue: {detail})";
+                if (!IsChatLoadSuperseded(version, lockedChatId))
+                    await TryCompleteSearchNavigationAsync(version, lockedChatId);
             }
         }
         else
         {
-            StatusMessage = $"{selectedChat.Title} ready.";
+            StatusMessage = $"{chatTitle} ready.";
+            if (!IsChatLoadSuperseded(version, lockedChatId))
+                await TryCompleteSearchNavigationAsync(version, lockedChatId);
         }
+    }
+
+    private async Task TryCompleteSearchNavigationAsync(int loadVersion, Guid loadedChatId)
+    {
+        var target = _pendingScrollToMessageId;
+        if (target is null) return;
+        if (IsChatLoadSuperseded(loadVersion, loadedChatId)) return;
+        if (ChatList.SelectedChat?.Id != loadedChatId) return;
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (IsChatLoadSuperseded(loadVersion, loadedChatId)) return;
+            if (ChatList.SelectedChat?.Id != loadedChatId) return;
+            ChatWindow.HighlightMessageForSearch(target.Value);
+        });
+
+        _pendingScrollToMessageId = null;
     }
 
     private async Task ShowSafetyNumberAsync()
@@ -886,13 +1032,22 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         return self?.Role == ChatRole.Owner;
     }
 
-    private string GetCurrentSessionId()
+    private string GetSessionIdForDirectChat(ChatListItemViewModel? chat)
     {
-        var selected = ChatList.SelectedChat;
-        if (selected is null) return string.Empty;
-        if (selected.Type != ChatType.Direct) return string.Empty;
-        return $"{_sessionService.CurrentUserId}:{selected.PeerUserId}";
+        if (chat is null || chat.Type != ChatType.Direct)
+        {
+            return string.Empty;
+        }
+
+        if (chat.PeerUserId == Guid.Empty)
+        {
+            return string.Empty;
+        }
+
+        return $"{_sessionService.CurrentUserId}:{chat.PeerUserId}";
     }
+
+    private string GetCurrentSessionId() => GetSessionIdForDirectChat(ChatList.SelectedChat);
 
     private async Task SendMessageAsync(ChatSendPayload payload)
     {

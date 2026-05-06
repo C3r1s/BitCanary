@@ -34,4 +34,15 @@ public sealed class LocalCacheService : ILocalCacheService
         await using var stream = File.OpenRead(filePath);
         return await JsonSerializer.DeserializeAsync<T>(stream, _serializerOptions, cancellationToken);
     }
+
+    public Task DeleteAsync(string key, CancellationToken cancellationToken = default)
+    {
+        var filePath = Path.Combine(_cacheRoot, $"{key}.json");
+        if (File.Exists(filePath))
+        {
+            File.Delete(filePath);
+        }
+
+        return Task.CompletedTask;
+    }
 }

@@ -11,13 +11,16 @@ public sealed class LocalMessageRepository(
 {
     private string OwnerId => sessionService.CurrentUserId.ToString();
 
-
-    public async Task SaveMessageAsync(
+    private static async Task InsertMessageRowAsync(
+        SqliteConnection conn,
+        string ownerId,
         MessageDto message,
-        int protocolVersion = 0,
-        CancellationToken cancellationToken = default)
+        int protocolVersion,
+        SqliteTransaction? transaction,
+        CancellationToken cancellationToken)
     {
-        await using var cmd = connection.CreateCommand();
+        await using var cmd = conn.CreateCommand();
+        cmd.Transaction = transaction;
         cmd.CommandText = """
             INSERT OR IGNORE INTO messages
                 (id, owner_user_id, chat_id, sender_id, client_message_id, protocol_version,
@@ -27,7 +30,7 @@ public sealed class LocalMessageRepository(
                  @encryptedPayload, @keyEnvelope, @encryptionAlgorithm, @sentAt, @status)
             """;
         cmd.Parameters.AddWithValue("@id", message.Id.ToString());
-        cmd.Parameters.AddWithValue("@ownerId", OwnerId);
+        cmd.Parameters.AddWithValue("@ownerId", ownerId);
         cmd.Parameters.AddWithValue("@chatId", message.ChatId.ToString());
         cmd.Parameters.AddWithValue("@senderId", message.SenderId.ToString());
         cmd.Parameters.AddWithValue("@clientMessageId", message.Id.ToString());
@@ -38,6 +41,89 @@ public sealed class LocalMessageRepository(
         cmd.Parameters.AddWithValue("@sentAt", message.CreatedAtUtc.ToString("O"));
         cmd.Parameters.AddWithValue("@status", (int)message.Status);
         await cmd.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task SaveMessageAsync(
+        MessageDto message,
+        int protocolVersion = 0,
+        CancellationToken cancellationToken = default) =>
+        await InsertMessageRowAsync(connection, OwnerId, message, protocolVersion, null, cancellationToken);
+
+    public async Task ReplaceChatMessagesAsync(
+        Guid chatId,
+        IReadOnlyList<MessageDto> messages,
+        CancellationToken cancellationToken = default)
+    {
+        var preservedPlaintext = new Dictionary<string, string>(StringComparer.Ordinal);
+        await using (var sel = connection.CreateCommand())
+        {
+            sel.CommandText = """
+                SELECT id, plaintext_body FROM messages
+                WHERE chat_id = @chatId AND owner_user_id = @ownerId
+                  AND plaintext_body IS NOT NULL AND LENGTH(TRIM(plaintext_body)) > 0
+                """;
+            sel.Parameters.AddWithValue("@chatId", chatId.ToString());
+            sel.Parameters.AddWithValue("@ownerId", OwnerId);
+            await using var reader = await sel.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+                preservedPlaintext[reader.GetString(0)] = reader.GetString(1);
+        }
+
+        var serverIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var m in messages)
+            serverIds.Add(m.Id.ToString());
+
+        await using var tx = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            await using (var del = connection.CreateCommand())
+            {
+                del.Transaction = tx;
+                del.CommandText = """
+                    DELETE FROM messages
+                    WHERE chat_id = @chatId AND owner_user_id = @ownerId
+                    """;
+                del.Parameters.AddWithValue("@chatId", chatId.ToString());
+                del.Parameters.AddWithValue("@ownerId", OwnerId);
+                await del.ExecuteNonQueryAsync(cancellationToken);
+            }
+
+            foreach (var message in messages)
+            {
+                await InsertMessageRowAsync(
+                    connection,
+                    OwnerId,
+                    message,
+                    (int)message.ProtocolVersion,
+                    tx,
+                    cancellationToken);
+            }
+
+            foreach (var (messageId, plaintext) in preservedPlaintext)
+            {
+                if (!serverIds.Contains(messageId)) continue;
+
+                await using (var up = connection.CreateCommand())
+                {
+                    up.Transaction = tx;
+                    up.CommandText = """
+                        UPDATE messages SET plaintext_body = @plaintext
+                        WHERE id = @id AND owner_user_id = @ownerId
+                        """;
+                    up.Parameters.AddWithValue("@plaintext", plaintext);
+                    up.Parameters.AddWithValue("@id", messageId);
+                    up.Parameters.AddWithValue("@ownerId", OwnerId);
+                    await up.ExecuteNonQueryAsync(cancellationToken);
+                }
+            }
+
+            await tx.CommitAsync(cancellationToken);
+        }
+        catch
+        {
+            await tx.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task<IReadOnlyList<MessageDto>> GetMessagesAsync(

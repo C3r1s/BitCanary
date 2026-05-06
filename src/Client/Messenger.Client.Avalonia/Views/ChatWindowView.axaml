@@ -140,7 +140,8 @@
       <ScrollViewer Name="MessagesScroll"
                     IsVisible="{Binding !HasNoMessages}"
                     Padding="0,4,0,4">
-        <ItemsControl ItemsSource="{Binding Messages}"
+        <ItemsControl Name="MessagesItems"
+                      ItemsSource="{Binding Messages}"
                       Margin="0,0,0,30">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:MessageItemViewModel">

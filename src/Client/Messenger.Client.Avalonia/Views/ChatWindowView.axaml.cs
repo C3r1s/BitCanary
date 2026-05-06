@@ -1,6 +1,7 @@
 // Код-behind «ChatWindowView.axaml»: обработка UI и связь с ViewModel.
 using System.Collections.Specialized;
 using System.ComponentModel;
+using System.Linq;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -13,6 +14,7 @@ public partial class ChatWindowView : UserControl
 {
     private ScrollViewer? _scrollViewer;
     private TextBox? _findQueryBox;
+    private ItemsControl? _messagesItems;
     private ChatWindowViewModel? _boundViewModel;
     private bool _stickToBottom = true;
 
@@ -27,6 +29,7 @@ public partial class ChatWindowView : UserControl
         base.OnLoaded(e);
         _scrollViewer = this.FindControl<ScrollViewer>("MessagesScroll");
         _findQueryBox = this.FindControl<TextBox>("FindQueryBox");
+        _messagesItems = this.FindControl<ItemsControl>("MessagesItems");
         if (_scrollViewer is not null)
         {
             _scrollViewer.ScrollChanged += OnScrollChanged;
@@ -39,6 +42,7 @@ public partial class ChatWindowView : UserControl
         {
             _boundViewModel.Messages.CollectionChanged -= OnMessagesChanged;
             _boundViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            _boundViewModel.ScrollToMessageRequested -= OnScrollToMessageRequested;
             foreach (var message in _boundViewModel.Messages)
             {
                 message.PropertyChanged -= OnMessagePropertyChanged;
@@ -50,6 +54,7 @@ public partial class ChatWindowView : UserControl
             _boundViewModel = vm;
             vm.Messages.CollectionChanged += OnMessagesChanged;
             vm.PropertyChanged += OnViewModelPropertyChanged;
+            vm.ScrollToMessageRequested += OnScrollToMessageRequested;
             foreach (var message in vm.Messages)
             {
                 message.PropertyChanged += OnMessagePropertyChanged;
@@ -59,6 +64,22 @@ public partial class ChatWindowView : UserControl
         {
             _boundViewModel = null;
         }
+    }
+
+    private void OnScrollToMessageRequested(Guid messageId)
+    {
+        var vm = _boundViewModel;
+        if (vm is null || _messagesItems is null) return;
+        var item = vm.Messages.FirstOrDefault(m => m.Id == messageId);
+        if (item is null) return;
+
+        void BringInView()
+        {
+            var container = _messagesItems!.ContainerFromItem(item);
+            (container as Control)?.BringIntoView();
+        }
+
+        Dispatcher.UIThread.Post(BringInView, DispatcherPriority.Loaded);
     }
 
     private void OnViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)

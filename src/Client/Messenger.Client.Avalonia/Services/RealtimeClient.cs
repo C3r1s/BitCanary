@@ -102,7 +102,14 @@ public sealed class RealtimeClient : IRealtimeClient
             ConnectionStateChanged?.Invoke(ConnectionState.Online);
             if (_currentlySelectedChatId.HasValue)
             {
-                await JoinChatAsync(_currentlySelectedChatId.Value);
+                try
+                {
+                    await JoinChatAsync(_currentlySelectedChatId.Value);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "SignalR reconnected but JoinChat failed for chat {ChatId}", _currentlySelectedChatId);
+                }
             }
             ReconnectedAndNeedsRefresh?.Invoke();
         };

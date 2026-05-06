@@ -68,6 +68,22 @@ public sealed partial class ChatWindowViewModel : ViewModelBase
 
     public IRelayCommand? CloseGroupInfoCommand { get; set; }
 
+    public event Action<Guid>? ScrollToMessageRequested;
+
+    public void HighlightMessageForSearch(Guid messageId)
+    {
+        var any = false;
+        foreach (var m in Messages)
+        {
+            var hit = m.Id == messageId;
+            if (hit) any = true;
+            m.IsHighlighted = hit;
+        }
+
+        if (any)
+            ScrollToMessageRequested?.Invoke(messageId);
+    }
+
     public IRelayCommand OpenFindBarCommand { get; }
 
     public IRelayCommand CloseFindBarCommand { get; }

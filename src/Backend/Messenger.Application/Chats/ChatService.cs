@@ -60,6 +60,7 @@ public sealed class ChatService(
 
         return chats
             .Select(chat => chat.ToDto(
+                userId,
                 lastMessageLookup.GetValueOrDefault(chat.Id),
                 unreadCounts.GetValueOrDefault(chat.Id)))
             .OrderByDescending(x => x.LastMessage?.CreatedAtUtc ?? DateTimeOffset.MinValue)
@@ -119,7 +120,7 @@ public sealed class ChatService(
             .ThenInclude(x => x.User)
             .SingleAsync(x => x.Id == chat.Id, cancellationToken);
 
-        return createdChat.ToDto(null, 0);
+        return createdChat.ToDto(userId, null, 0);
     }
 
     public async Task DeleteChatAsync(Guid chatId, CancellationToken cancellationToken)
@@ -235,7 +236,7 @@ public sealed class ChatService(
             .Include(x => x.Memberships).ThenInclude(x => x.User)
             .SingleAsync(x => x.Id == chatId, cancellationToken);
 
-        return updated.ToDto(null, 0);
+        return updated.ToDto(callerId, null, 0);
     }
 
     public async Task RemoveMemberAsync(Guid chatId, Guid userId, CancellationToken cancellationToken)
@@ -339,6 +340,6 @@ public sealed class ChatService(
             .Include(x => x.Memberships).ThenInclude(x => x.User)
             .SingleAsync(x => x.Id == chatId, cancellationToken);
 
-        return updated.ToDto(null, 0);
+        return updated.ToDto(callerId, null, 0);
     }
 }

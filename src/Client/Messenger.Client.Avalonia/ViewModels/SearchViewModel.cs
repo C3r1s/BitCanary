@@ -44,6 +44,9 @@ public sealed partial class SearchViewModel : ViewModelBase
     public ObservableCollection<SearchResultItemViewModel> SearchResults { get; } = new();
     public ObservableCollection<UserResultItemViewModel> UserResults { get; } = new();
 
+    /// <summary>Raised on the UI thread immediately before SearchResults / UserResults are cleared so ListBox selection can be reset safely.</summary>
+    public event EventHandler? BeforeSearchCollectionsMutation;
+
     public IRelayCommand<SearchResultItemViewModel> SelectResultCommand { get; }
     public IRelayCommand<UserResultItemViewModel> SelectUserCommand { get; }
 
@@ -83,6 +86,11 @@ public sealed partial class SearchViewModel : ViewModelBase
         });
     }
 
+    private void NotifyBeforeSearchCollectionsMutation()
+    {
+        BeforeSearchCollectionsMutation?.Invoke(this, EventArgs.Empty);
+    }
+
     partial void OnSearchQueryChanged(string value)
     {
         _debounceCts?.Cancel();
@@ -91,6 +99,7 @@ public sealed partial class SearchViewModel : ViewModelBase
 
         if (string.IsNullOrWhiteSpace(value))
         {
+            NotifyBeforeSearchCollectionsMutation();
             SearchResults.Clear();
             UserResults.Clear();
             HasSearched = false;
@@ -104,6 +113,7 @@ public sealed partial class SearchViewModel : ViewModelBase
         var trimmed = value.Trim();
         var isUserLookup = trimmed.StartsWith('@');
         IsUserLookupMode = isUserLookup;
+        NotifyBeforeSearchCollectionsMutation();
         SearchResults.Clear();
         UserResults.Clear();
 
@@ -147,6 +157,7 @@ public sealed partial class SearchViewModel : ViewModelBase
                 await Dispatcher.UIThread.InvokeAsync(() =>
                 {
                     IsLoading = false;
+                    NotifyBeforeSearchCollectionsMutation();
                     SearchResults.Clear();
                     UserResults.Clear();
                     IsUserLookupMode = userMode;
@@ -192,14 +203,20 @@ public sealed partial class SearchViewModel : ViewModelBase
         _debounceCts?.Dispose();
         _debounceCts = null;
 
+        var queryWasEmpty = string.IsNullOrWhiteSpace(SearchQuery);
         SearchQuery = string.Empty;
-        SearchResults.Clear();
-        UserResults.Clear();
-        HasSearched = false;
-        ShowNoResults = false;
-        IsUserLookupMode = false;
+        if (queryWasEmpty)
+        {
+            NotifyBeforeSearchCollectionsMutation();
+            SearchResults.Clear();
+            UserResults.Clear();
+            HasSearched = false;
+            ShowNoResults = false;
+            IsUserLookupMode = false;
+            EmptyStateHeading = string.Empty;
+            EmptyStateBody = string.Empty;
+        }
+
         IsLoading = false;
-        EmptyStateHeading = string.Empty;
-        EmptyStateBody = string.Empty;
     }
 }

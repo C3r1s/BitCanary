@@ -52,16 +52,29 @@ public static class MappingExtensions
             message.ProtocolVersion,
             status);
 
-    public static ChatSummaryDto ToDto(this Chat chat, MessageDto? lastMessage, int unreadCount) =>
-        new(
+    public static ChatSummaryDto ToDto(this Chat chat, Guid viewerUserId, MessageDto? lastMessage, int unreadCount)
+    {
+        var title = chat.Title;
+        if (chat.Type == ChatType.Direct)
+        {
+            var peerMembership = chat.Memberships.FirstOrDefault(m => m.UserId != viewerUserId);
+            var peerUser = peerMembership?.User;
+            if (peerUser is not null && !string.IsNullOrWhiteSpace(peerUser.DisplayName))
+            {
+                title = peerUser.DisplayName;
+            }
+        }
+
+        return new ChatSummaryDto(
             chat.Id,
-            chat.Title,
+            title,
             chat.Type,
             chat.AvatarUrl,
             chat.Description,
             lastMessage,
             unreadCount,
             chat.Memberships.Select(static x => x.ToDto()).ToArray());
+    }
 
     public static FolderDto ToDto(this Folder folder) =>
         new(

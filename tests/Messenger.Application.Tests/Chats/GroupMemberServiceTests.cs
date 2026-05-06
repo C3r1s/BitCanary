@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «GroupMemberServiceTests».
 using System.Net;
 using Messenger.Application.Abstractions;
 using Messenger.Application.Chats;
@@ -30,7 +31,7 @@ public sealed class GroupMemberServiceTests
     }
 
     private static ChatService CreateService(AppDbContext db, ICurrentUserContext currentUser)
-        => new(db, currentUser);
+        => new(db, currentUser, Substitute.For<IRealtimeNotifier>());
 
     private static (AppDbContext db, Guid chatId, Guid ownerId, Guid adminId, Guid memberId) SeedGroupChat()
     {
@@ -95,7 +96,6 @@ public sealed class GroupMemberServiceTests
     {
         var (db, chatId, _, adminId, _) = SeedGroupChat();
 
-        // Add a second admin to remove
         var secondAdminId = Guid.NewGuid();
         var secondAdmin = new User
             { Id = secondAdminId, UserName = "admin2", DisplayName = "Admin2", PasswordHash = "x", PublicKey = "k" };

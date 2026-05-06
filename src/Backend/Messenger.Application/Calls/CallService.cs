@@ -1,3 +1,4 @@
+// Маршрутизация WebRTC-сигналов между участниками через SignalR.
 using Messenger.Application.Abstractions;
 using Messenger.Application.Common;
 using Messenger.Domain.Entities;

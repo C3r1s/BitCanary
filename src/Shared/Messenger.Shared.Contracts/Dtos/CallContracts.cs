@@ -1,3 +1,4 @@
+// DTO передачи «CallContracts» между API BitCanary и клиентами.
 namespace Messenger.Shared.Contracts.Dtos;
 
 public sealed record CallSignalDto(

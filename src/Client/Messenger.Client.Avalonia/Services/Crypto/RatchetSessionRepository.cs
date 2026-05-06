@@ -1,14 +1,10 @@
+// Клиентское E2E: «RatchetSessionRepository» (сессии, ключи, ratchet).
 using Microsoft.Data.Sqlite;
 
 namespace Messenger.Client.Avalonia.Services.Crypto;
 
-/// <summary>
-/// SQLite-backed implementation of <see cref="IRatchetSessionRepository"/>.
-/// Receives an open <see cref="SqliteConnection"/> (schema already applied by DatabaseService).
-/// </summary>
 public sealed class RatchetSessionRepository(SqliteConnection connection) : IRatchetSessionRepository
 {
-    /// <inheritdoc/>
     public async Task<byte[]?> LoadSessionAsync(string sessionId, CancellationToken ct = default)
     {
         await using var cmd = connection.CreateCommand();
@@ -21,7 +17,6 @@ public sealed class RatchetSessionRepository(SqliteConnection connection) : IRat
         return blob.Length == 0 ? null : blob;
     }
 
-    /// <inheritdoc/>
     public async Task SaveSessionAsync(string sessionId, byte[] blob, CancellationToken ct = default)
     {
         await using var cmd = connection.CreateCommand();
@@ -34,7 +29,36 @@ public sealed class RatchetSessionRepository(SqliteConnection connection) : IRat
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    /// <inheritdoc/>
+    public async Task DeleteSessionAsync(string sessionId, CancellationToken ct = default)
+    {
+        await using var tx = await connection.BeginTransactionAsync(ct);
+        try
+        {
+            await using (var cmd = connection.CreateCommand())
+            {
+                cmd.Transaction = (SqliteTransaction)tx;
+                cmd.CommandText = "DELETE FROM skipped_message_keys WHERE session_id = $id";
+                cmd.Parameters.AddWithValue("$id", sessionId);
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            await using (var cmd = connection.CreateCommand())
+            {
+                cmd.Transaction = (SqliteTransaction)tx;
+                cmd.CommandText = "DELETE FROM ratchet_sessions WHERE id = $id";
+                cmd.Parameters.AddWithValue("$id", sessionId);
+                await cmd.ExecuteNonQueryAsync(ct);
+            }
+
+            await tx.CommitAsync(ct);
+        }
+        catch
+        {
+            await tx.RollbackAsync(ct);
+            throw;
+        }
+    }
+
     public async Task<byte[]?> TryConsumeSkippedKeyAsync(
         string sessionId,
         byte[] ratchetPubkey,
@@ -88,7 +112,6 @@ public sealed class RatchetSessionRepository(SqliteConnection connection) : IRat
         }
     }
 
-    /// <inheritdoc/>
     public async Task SaveSkippedKeyAsync(
         string sessionId,
         byte[] ratchetPubkey,
@@ -109,7 +132,6 @@ public sealed class RatchetSessionRepository(SqliteConnection connection) : IRat
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    /// <inheritdoc/>
     public async Task EnforceSkippedKeyLimitAsync(string sessionId, int maxKeys, CancellationToken ct = default)
     {
         await using var cmd = connection.CreateCommand();
@@ -128,7 +150,6 @@ public sealed class RatchetSessionRepository(SqliteConnection connection) : IRat
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    /// <inheritdoc/>
     public async Task<(bool Verified, DateTimeOffset? LastVerifiedAt, byte[]? RemoteIkPublic)>
         LoadVerificationStateAsync(string sessionId, CancellationToken ct = default)
     {
@@ -161,7 +182,6 @@ public sealed class RatchetSessionRepository(SqliteConnection connection) : IRat
         return (verified, lastVerifiedAt, remoteIkPublic);
     }
 
-    /// <inheritdoc/>
     public async Task SaveVerificationStateAsync(
         string sessionId,
         bool verified,
@@ -169,7 +189,6 @@ public sealed class RatchetSessionRepository(SqliteConnection connection) : IRat
         byte[]? remoteIkPublic,
         CancellationToken ct = default)
     {
-        // UPSERT: insert skeleton row if absent, then update verification columns
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = """
             INSERT INTO ratchet_sessions(id, session_blob, updated_at, verified, last_verified_at, remote_ik_public)

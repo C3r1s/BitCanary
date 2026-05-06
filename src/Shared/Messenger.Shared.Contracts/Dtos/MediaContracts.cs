@@ -1,3 +1,4 @@
+// DTO передачи «MediaContracts» между API BitCanary и клиентами.
 namespace Messenger.Shared.Contracts.Dtos;
 
 public sealed record MediaUploadResponse(

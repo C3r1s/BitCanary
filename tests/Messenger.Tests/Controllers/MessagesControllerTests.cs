@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «MessagesControllerTests».
 using FluentAssertions;
 using Messenger.Api.Controllers;
 using Messenger.Application.Abstractions;

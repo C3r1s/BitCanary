@@ -1,14 +1,13 @@
-﻿using System;
+// Миграция схемы БД BitCanary: применение изменений к PostgreSQL.
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Messenger.Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
     public partial class AddKeyBundles : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<int>(
@@ -61,7 +60,6 @@ namespace Messenger.Infrastructure.Persistence.Migrations
                 unique: true);
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(

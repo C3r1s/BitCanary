@@ -1,3 +1,5 @@
+// Состояние и команды UI BitCanary для «MessageItemViewModel».
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Messenger.Shared.Contracts;
@@ -9,27 +11,60 @@ public sealed partial class MessageItemViewModel : ViewModelBase
     public required Guid Id { get; init; }
     public required string SenderDisplayName { get; init; }
     public required string DisplayText { get; init; }
+
+    public MessageKind MessageKind { get; init; } = MessageKind.Text;
+
+    public Guid? MediaId { get; init; }
+
+    private Bitmap? _inlineImage;
+
+    public Bitmap? InlineImage
+    {
+        get => _inlineImage;
+        set
+        {
+            if (ReferenceEquals(_inlineImage, value)) return;
+            var old = _inlineImage;
+            _inlineImage = value;
+            old?.Dispose();
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasInlineImage));
+            OnPropertyChanged(nameof(CaptionVisible));
+            OnPropertyChanged(nameof(ShowTextGlyphRow));
+            OnPropertyChanged(nameof(ShowRetryButton));
+        }
+    }
+
+    public bool HasInlineImage => InlineImage is not null;
+
+    public bool CaptionVisible =>
+        !HasInlineImage
+        || DisplayText.Trim('\u200b', ' ', '\t', '\r', '\n').Length > 0;
+
+    public bool ShowTextGlyphRow => !HasInlineImage || CaptionVisible || IsEncrypted;
+
+    public bool ShowRetryButton => IsFailedOutgoing && MessageKind == MessageKind.Text;
     public required string Timestamp { get; init; }
     public required bool IsOutgoing { get; init; }
+    public bool IsEncrypted { get; init; }
+    public bool IsGroupChat { get; init; }
+    public bool ShowEncryptionGlyph => IsEncrypted && !IsGroupChat;
+    public string EncryptionGlyph => IsEncrypted ? "\U0001F512" : string.Empty;
 
-    /// <summary>Stable Guid assigned at creation. Reused on retry for server-side dedup.</summary>
     public required Guid ClientMessageId { get; init; }
 
-    /// <summary>Set by per-chat find-bar logic to show accent left-border on matching messages.</summary>
     [ObservableProperty]
     private bool _isHighlighted;
 
-    /// <summary>Send status for outgoing messages. Defaults to Sending until updated by SignalR events.</summary>
     [ObservableProperty]
     private MessageStatus _status = MessageStatus.Sending;
 
-    /// <summary>Display glyph corresponding to the current send status.</summary>
-    public string StatusGlyph => _status switch
+    public string StatusGlyph => Status switch
     {
-        MessageStatus.Sending   => "\u29D6",  // ⧖
-        MessageStatus.Delivered => "\u2713",  // ✓
-        MessageStatus.Read      => "\u2713\u2713", // ✓✓
-        MessageStatus.Failed    => "\u26A0",  // ⚠
+        MessageStatus.Sending   => "...",
+        MessageStatus.Delivered => "v",
+        MessageStatus.Read      => "vv",
+        MessageStatus.Failed    => "!",
         _                       => string.Empty
     };
 
@@ -37,20 +72,15 @@ public sealed partial class MessageItemViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(StatusGlyph));
         OnPropertyChanged(nameof(IsFailedOutgoing));
+        OnPropertyChanged(nameof(ShowRetryButton));
     }
 
-    /// <summary>True when this outgoing message failed to send. Drives Retry button visibility.</summary>
     public bool IsFailedOutgoing => Status == MessageStatus.Failed && IsOutgoing;
 
-    /// <summary>
-    /// Delegate injected by MainWindowViewModel. Null on non-outgoing or non-retryable messages.
-    /// </summary>
     private Func<Guid, Task>? _retryDelegate;
 
-    /// <summary>Command bound in AXAML. Visible only when IsFailedOutgoing.</summary>
     public IAsyncRelayCommand RetryCommand { get; private set; } = null!;
 
-    /// <summary>Initialise the retry delegate. Called by MainWindowViewModel after construction.</summary>
     public void SetRetryDelegate(Func<Guid, Task> retryDelegate)
     {
         _retryDelegate = retryDelegate;
@@ -65,7 +95,6 @@ public sealed partial class MessageItemViewModel : ViewModelBase
         await _retryDelegate(ClientMessageId);
     }
 
-    // Banner support — optional, only set for system banner messages
     public bool IsSystemBanner { get; init; }
     public string? BannerText { get; init; }
     public string? BannerAction1Label { get; init; }
@@ -73,9 +102,6 @@ public sealed partial class MessageItemViewModel : ViewModelBase
     public IRelayCommand? BannerAction1Command { get; init; }
     public IRelayCommand? BannerAction2Command { get; init; }
 
-    /// <summary>
-    /// Creates a system banner MessageItemViewModel for key change alerts.
-    /// </summary>
     public static MessageItemViewModel CreateBanner(
         string text,
         IRelayCommand verifyNowCommand,

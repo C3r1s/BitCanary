@@ -1,3 +1,4 @@
+// Общее перечисление/константа BitCanary: «ThemePreference» (клиент + сервер).
 namespace Messenger.Shared.Contracts;
 
 public enum ThemePreference

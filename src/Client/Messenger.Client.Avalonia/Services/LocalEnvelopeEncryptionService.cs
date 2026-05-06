@@ -1,3 +1,4 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «LocalEnvelopeEncryptionService».
 using System.Security.Cryptography;
 using System.Text;
 using Messenger.Client.Avalonia.Models;

@@ -1,17 +1,11 @@
+// Клиентское E2E: «KeyPublicationService» (сессии, ключи, ratchet).
 using Messenger.Shared.Contracts.Dtos;
 using Microsoft.Extensions.Logging;
+using NSec.Cryptography;
+using System.Security.Cryptography;
 
 namespace Messenger.Client.Avalonia.Services.Crypto;
 
-/// <summary>
-/// Manages the lifecycle of the local X3DH key bundle:
-/// - Generates and uploads a new bundle on first login (D-07, D-08)
-/// - Rotates the SPK after 7 days (D-10)
-/// - Replenishes OPKs when the server signals low supply (D-09)
-///
-/// Private key material is DPAPI-protected via IKeyStore before being
-/// stored in ILocalCacheService.
-/// </summary>
 public sealed class KeyPublicationService(
     IX3DHService x3dh,
     IKeyStore keyStore,
@@ -34,29 +28,17 @@ public sealed class KeyPublicationService(
 
     private X3DHKeyBundle? _localBundle;
 
-    // Maps base64-encoded OPK public key -> DPAPI-protected base64 private key.
-    // We use base64 public key as map key because IDs are assigned server-side.
-    // For lookup by server-assigned Guid, we scan by matching public key bytes.
     private Dictionary<string, string> _otpPrivates = new();
 
-    // Maps Guid (server-assigned OPK ID) -> OtpKeyPair, populated after upload.
     private Dictionary<Guid, OtpKeyPair> _otpById = new();
 
-    /// <summary>The local X3DH key bundle. Available after EnsureKeyBundlePublishedAsync.</summary>
     public X3DHKeyBundle LocalBundle =>
         _localBundle ?? throw new InvalidOperationException(
             "Key bundle not loaded. Call EnsureKeyBundlePublishedAsync first.");
 
-    /// <summary>Looks up the OTP private key by server-assigned OPK ID.</summary>
     public OtpKeyPair? FindOtpPrivateKey(Guid opkId) =>
         _otpById.TryGetValue(opkId, out var pair) ? pair : null;
 
-    /// <summary>
-    /// Ensures the local key bundle is published to the server.
-    /// On first run: generates, uploads, and persists.
-    /// On subsequent runs: loads from cache and checks SPK rotation.
-    /// Failures are logged as warnings — NOT thrown (D-09).
-    /// </summary>
     public async Task EnsureKeyBundlePublishedAsync(CancellationToken ct = default)
     {
         try
@@ -70,7 +52,9 @@ public sealed class KeyPublicationService(
             else
             {
                 await LoadBundleFromCacheAsync(ct);
+                await EnsureLocalBundleIntegrityAsync(ct);
                 await CheckSpkRotationAsync(ct);
+                await EnsureLocalBundleIntegrityAsync(ct);
             }
         }
         catch (Exception ex)
@@ -79,20 +63,13 @@ public sealed class KeyPublicationService(
         }
     }
 
-    /// <summary>
-    /// Regenerates the identity key, signs a new SPK, and re-publishes the entire key bundle.
-    /// All existing sessions will see a safety number change on next contact.
-    /// Failures are logged as warnings — callers should handle gracefully.
-    /// </summary>
     public async Task RegenerateAndPublishAsync(CancellationToken ct = default)
     {
         logger.LogInformation("Regenerating identity key and re-publishing bundle.");
 
-        // Generate entirely new bundle (new IK, SPK, and OPKs)
         _localBundle = x3dh.GenerateKeyBundle();
         var otpKeys = x3dh.GenerateOneTimePreKeys(InitialOtpkCount);
 
-        // Clear old local key material from cache by overwriting with new keys
         await localCacheService.SaveAsync(IkPrivateCacheKey, keyStore.ProtectToBase64(_localBundle.IkPrivate), ct);
         await localCacheService.SaveAsync(SpkPrivateCacheKey, keyStore.ProtectToBase64(_localBundle.SpkPrivate), ct);
         await localCacheService.SaveAsync(IkPublicCacheKey, Convert.ToBase64String(_localBundle.IkPublic), ct);
@@ -100,7 +77,6 @@ public sealed class KeyPublicationService(
         await localCacheService.SaveAsync(SpkSignatureCacheKey, Convert.ToBase64String(_localBundle.SpkSignature), ct);
         await localCacheService.SaveAsync(SpkCreatedAtCacheKey, _localBundle.SpkCreatedAt.ToString("O"), ct);
 
-        // Upload identity + pre-key bundle (null DeviceId so server assigns a new one)
         var resp = await apiClient.UploadKeyBundleAsync(
             new KeyBundleUploadRequest(
                 null,
@@ -109,14 +85,11 @@ public sealed class KeyPublicationService(
                 _localBundle.SpkSignature),
             ct);
 
-        // Persist new device ID
         await localCacheService.SaveAsync(DeviceIdCacheKey, resp.DeviceId.ToString(), ct);
 
-        // Upload fresh OPKs
         var otpResp = await apiClient.ReplenishOtpksAsync(
             new OtpkReplenishRequest(resp.DeviceId, otpKeys.Select(k => k.Public).ToArray()), ct);
 
-        // Replace OTP private key store
         _otpPrivates = otpKeys.ToDictionary(
             k => Convert.ToBase64String(k.Public),
             k => keyStore.ProtectToBase64(k.Private));
@@ -129,9 +102,6 @@ public sealed class KeyPublicationService(
         logger.LogInformation("Identity key regeneration complete. DeviceId={DeviceId}", resp.DeviceId);
     }
 
-    /// <summary>
-    /// Replenishes OPKs when the server signals the pool is low (D-09).
-    /// </summary>
     public async Task ReplenishOtpksAsync(CancellationToken ct = default)
     {
         try
@@ -148,7 +118,6 @@ public sealed class KeyPublicationService(
             var resp = await apiClient.ReplenishOtpksAsync(
                 new OtpkReplenishRequest(deviceId, newOtps.Select(k => k.Public).ToArray()), ct);
 
-            // Merge into in-memory store keyed by base64 public key
             foreach (var otp in newOtps)
             {
                 var pubKey = Convert.ToBase64String(otp.Public);
@@ -157,7 +126,6 @@ public sealed class KeyPublicationService(
 
             await localCacheService.SaveAsync(OtpPrivatesCacheKey, _otpPrivates, ct);
 
-            // Populate and persist Guid-to-OtpKeyPair mapping using server-assigned IDs
             PopulateOtpById(resp.AssignedIds, newOtps);
             await PersistOtpIdMapAsync(ct);
 
@@ -169,9 +137,6 @@ public sealed class KeyPublicationService(
         }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Private helpers
-    // ─────────────────────────────────────────────────────────────────────────
 
     private async Task GenerateAndUploadBundleAsync(CancellationToken ct)
     {
@@ -180,7 +145,6 @@ public sealed class KeyPublicationService(
         _localBundle = x3dh.GenerateKeyBundle();
         var otpKeys = x3dh.GenerateOneTimePreKeys(InitialOtpkCount);
 
-        // Upload identity + pre-key bundle
         var resp = await apiClient.UploadKeyBundleAsync(
             new KeyBundleUploadRequest(
                 null,
@@ -189,15 +153,12 @@ public sealed class KeyPublicationService(
                 _localBundle.SpkSignature),
             ct);
 
-        // Upload OPKs
         var otpResp = await apiClient.ReplenishOtpksAsync(
             new OtpkReplenishRequest(resp.DeviceId, otpKeys.Select(k => k.Public).ToArray()),
             ct);
 
-        // Persist device ID
         await localCacheService.SaveAsync(DeviceIdCacheKey, resp.DeviceId.ToString(), ct);
 
-        // Persist DPAPI-protected private keys
         await localCacheService.SaveAsync(IkPrivateCacheKey, keyStore.ProtectToBase64(_localBundle.IkPrivate), ct);
         await localCacheService.SaveAsync(SpkPrivateCacheKey, keyStore.ProtectToBase64(_localBundle.SpkPrivate), ct);
         await localCacheService.SaveAsync(IkPublicCacheKey, Convert.ToBase64String(_localBundle.IkPublic), ct);
@@ -205,13 +166,11 @@ public sealed class KeyPublicationService(
         await localCacheService.SaveAsync(SpkSignatureCacheKey, Convert.ToBase64String(_localBundle.SpkSignature), ct);
         await localCacheService.SaveAsync(SpkCreatedAtCacheKey, _localBundle.SpkCreatedAt.ToString("O"), ct);
 
-        // Persist OTP private keys (DPAPI-protected) keyed by base64 public key
         _otpPrivates = otpKeys.ToDictionary(
             k => Convert.ToBase64String(k.Public),
             k => keyStore.ProtectToBase64(k.Private));
         await localCacheService.SaveAsync(OtpPrivatesCacheKey, _otpPrivates, ct);
 
-        // Populate and persist Guid-to-OtpKeyPair mapping using server-assigned IDs
         PopulateOtpById(otpResp.AssignedIds, otpKeys);
         await PersistOtpIdMapAsync(ct);
 
@@ -244,7 +203,6 @@ public sealed class KeyPublicationService(
         _otpPrivates = await localCacheService.LoadAsync<Dictionary<string, string>>(OtpPrivatesCacheKey, ct)
                        ?? new Dictionary<string, string>();
 
-        // Restore Guid-to-OtpKeyPair mapping from persisted ID map
         _otpById = new Dictionary<Guid, OtpKeyPair>();
         var otpIdMap = await localCacheService.LoadAsync<Dictionary<string, string>>(OtpIdMapCacheKey, ct);
         if (otpIdMap is not null)
@@ -299,10 +257,8 @@ public sealed class KeyPublicationService(
 
         var deviceId = Guid.Parse(deviceIdStr);
 
-        // Generate new SPK
         var newBundle = x3dh.GenerateKeyBundle();
 
-        // Build rotated bundle reusing existing IK
         var rotated = new X3DHKeyBundle(
             IkPublic: _localBundle.IkPublic,
             IkPrivate: _localBundle.IkPrivate,
@@ -319,7 +275,6 @@ public sealed class KeyPublicationService(
                 rotated.SpkSignature),
             ct);
 
-        // Persist updated bundle
         _localBundle = rotated;
         await localCacheService.SaveAsync(SpkPrivateCacheKey, keyStore.ProtectToBase64(rotated.SpkPrivate), ct);
         await localCacheService.SaveAsync(SpkPublicCacheKey, Convert.ToBase64String(rotated.SpkPublic), ct);
@@ -327,5 +282,35 @@ public sealed class KeyPublicationService(
         await localCacheService.SaveAsync(SpkCreatedAtCacheKey, rotated.SpkCreatedAt.ToString("O"), ct);
 
         logger.LogInformation("SPK rotation complete.");
+    }
+
+    private async Task EnsureLocalBundleIntegrityAsync(CancellationToken ct)
+    {
+        if (_localBundle is null)
+        {
+            return;
+        }
+
+        if (IsSpkPairConsistent(_localBundle))
+        {
+            return;
+        }
+
+        logger.LogWarning("Local SPK private/public mismatch detected. Regenerating and re-publishing key bundle.");
+        await RegenerateAndPublishAsync(ct);
+    }
+
+    private static bool IsSpkPairConsistent(X3DHKeyBundle bundle)
+    {
+        try
+        {
+            using var imported = Key.Import(KeyAgreementAlgorithm.X25519, bundle.SpkPrivate, KeyBlobFormat.RawPrivateKey);
+            var derivedPub = imported.PublicKey.Export(KeyBlobFormat.RawPublicKey);
+            return CryptographicOperations.FixedTimeEquals(derivedPub, bundle.SpkPublic);
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

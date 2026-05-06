@@ -1,3 +1,4 @@
+// API входа и регистрации: выдача JWT и создание пользователя.
 using Messenger.Application.Abstractions;
 using Messenger.Shared.Contracts.Dtos;
 using Microsoft.AspNetCore.Authorization;

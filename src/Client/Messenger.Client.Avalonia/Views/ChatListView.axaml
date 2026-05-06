@@ -1,3 +1,4 @@
+<!-- Разметка экрана BitCanary «ChatListView»: поля, списки и панели (Avalonia). -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
@@ -6,61 +7,53 @@
              x:DataType="vm:ChatListViewModel">
   <Grid RowDefinitions="Auto,Auto,*,Auto">
 
-    <!-- Header -->
+    
     <Border Grid.Row="0"
             Background="#0D0D0D"
             BorderBrush="#1E1E1E"
             BorderThickness="0,0,0,1"
             Padding="12,10">
-      <Grid ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="4">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="4">
         <TextBlock Text="CHANNELS"
-                   FontSize="12" FontWeight="Bold"
+                   FontSize="14" FontWeight="Bold"
                    Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                    IsVisible="{Binding IsInNormalMode}"
                    VerticalAlignment="Center" />
         <TextBlock Text="USER SEARCH"
-                   FontSize="12" FontWeight="Bold"
+                   FontSize="14" FontWeight="Bold"
                    Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                    IsVisible="{Binding IsUserSearchMode}"
                    VerticalAlignment="Center" />
         <TextBlock Text="SEARCH"
-                   FontSize="12" FontWeight="Bold"
+                   FontSize="14" FontWeight="Bold"
                    Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                    IsVisible="{Binding IsSearchMode}"
                    VerticalAlignment="Center" />
         <TextBlock Text="GROUP CREATION"
-                   FontSize="12" FontWeight="Bold"
+                   FontSize="14" FontWeight="Bold"
                    Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                    IsVisible="{Binding IsGroupCreationMode}"
                    VerticalAlignment="Center" />
         <Button Grid.Column="1"
-                Content="[ + ]"
-                Command="{Binding ToggleUserSearchCommand}"
-                Background="Transparent"
-                Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
-                Padding="6,2"
-                FontSize="12"
-                ToolTip.Tip="New direct message" />
-        <Button Grid.Column="2"
                 Content="[ G ]"
                 Command="{Binding ToggleGroupCreationCommand}"
                 Background="Transparent"
                 Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                 Padding="6,2"
-                FontSize="12"
+                FontSize="14"
                 ToolTip.Tip="Create a group" />
-        <Button Grid.Column="3"
+        <Button Grid.Column="2"
                 Content="[ / ]"
                 Command="{Binding ToggleSearchCommand}"
                 Background="Transparent"
                 Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                 Padding="6,2"
-                FontSize="12"
+                FontSize="14"
                 ToolTip.Tip="Search messages" />
       </Grid>
     </Border>
 
-    <!-- Filter input (chat list mode only) -->
+    
     <Border Grid.Row="1"
             IsVisible="{Binding IsInNormalMode}"
             BorderBrush="#1E1E1E"
@@ -71,10 +64,10 @@
                Background="Transparent"
                BorderThickness="0"
                Padding="4,3"
-               FontSize="12" />
+               FontSize="14" />
     </Border>
 
-    <!-- Chat list -->
+    
     <ListBox Grid.Row="2"
              IsVisible="{Binding IsInNormalMode}"
              ItemsSource="{Binding Chats}"
@@ -82,6 +75,19 @@
              Background="Transparent"
              BorderThickness="0"
              Padding="0">
+      <ListBox.Styles>
+        
+        <Style Selector="ListBoxItem TextBlock.chat-row-text">
+          <Setter Property="Foreground" Value="#505050" />
+        </Style>
+        <Style Selector="ListBoxItem:selected TextBlock.chat-row-text">
+          <Setter Property="Foreground" Value="#000000" />
+        </Style>
+        
+        <Style Selector="ListBoxItem TextBlock.chat-row-title">
+          <Setter Property="Foreground" Value="{DynamicResource SystemControlHighlightAccentBrush}" />
+        </Style>
+      </ListBox.Styles>
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="vm:ChatListItemViewModel">
           <Border BorderBrush="#141414" BorderThickness="0,0,0,1" Padding="12,9" Background="Transparent">
@@ -94,7 +100,7 @@
                 <MenuItem Header="Delete chat"
                           Command="{Binding DeleteChatCommand}"
                           Foreground="#E05050"
-                          FontSize="12"
+                          FontSize="14"
                           Padding="8,8">
                   <MenuItem.Styles>
                     <Style Selector="MenuItem:pointerover /template/ ContentPresenter">
@@ -106,7 +112,7 @@
                 <MenuItem Header="Clear messages"
                           Command="{Binding ClearMessagesCommand}"
                           Foreground="#C8C8C8"
-                          FontSize="12"
+                          FontSize="14"
                           Padding="8,8">
                   <MenuItem.Styles>
                     <Style Selector="MenuItem:pointerover /template/ ContentPresenter">
@@ -117,21 +123,24 @@
               </ContextMenu>
             </Border.ContextMenu>
             <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-              <!-- Name + preview -->
+              
               <StackPanel Spacing="3" VerticalAlignment="Center">
                 <TextBlock Text="{Binding Title}"
-                           FontSize="13" FontWeight="SemiBold" />
+                           FontSize="14" FontWeight="SemiBold"
+                           Classes="chat-row-title" />
                 <TextBlock Text="{Binding Subtitle}"
-                           FontSize="11" Foreground="#505050"
+                           FontSize="14"
+                           Classes="chat-row-text"
                            TextTrimming="CharacterEllipsis" />
               </StackPanel>
-              <!-- Timestamp + unread badge -->
+              
               <StackPanel Grid.Column="1"
                           HorizontalAlignment="Right"
                           Spacing="4"
                           VerticalAlignment="Center">
                 <TextBlock Text="{Binding LastActivity}"
-                           FontSize="11" Foreground="#404040"
+                           FontSize="14"
+                           Classes="chat-row-text"
                            HorizontalAlignment="Right" />
                 <Border Background="#003D2A"
                         BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
@@ -141,7 +150,7 @@
                         IsVisible="{Binding HasUnreadMessages}">
                   <TextBlock Text="{Binding UnreadCount}"
                              Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
-                             FontSize="11" />
+                             FontSize="14" />
                 </Border>
               </StackPanel>
             </Grid>
@@ -150,33 +159,36 @@
       </ListBox.ItemTemplate>
     </ListBox>
 
-    <!-- Search results mode -->
+    
     <Panel Grid.Row="2" IsVisible="{Binding IsSearchMode}">
       <views:SearchResultsView DataContext="{Binding Search}" />
     </Panel>
 
-    <!-- User search mode -->
+    
     <Panel Grid.Row="2" IsVisible="{Binding IsUserSearchMode}">
       <views:UserSearchView DataContext="{Binding UserSearch}" />
     </Panel>
 
-    <!-- Group creation mode — AVLN2000-safe Panel wrapper -->
+    
     <Panel Grid.Row="2" IsVisible="{Binding IsGroupCreationMode}">
       <views:GroupCreationView DataContext="{Binding GroupCreation}" />
     </Panel>
 
-    <!-- Settings button pinned at bottom -->
+    
     <Border Grid.Row="3"
             BorderBrush="#1E1E1E"
-            BorderThickness="0,1,0,0">
+            BorderThickness="0,1,0,0"
+            Padding="10,8">
       <Button Content="[ SETTINGS ]"
+              Height="36"
               MinHeight="36"
               Background="Transparent"
               Foreground="#505050"
               BorderThickness="0"
               HorizontalAlignment="Stretch"
               HorizontalContentAlignment="Center"
-              FontSize="12"
+              VerticalContentAlignment="Center"
+              FontSize="14"
               ToolTip.Tip="Settings"
               Command="{Binding $parent[Window].((vm:MainWindowViewModel)DataContext).ToggleSettingsCommand}" />
     </Border>

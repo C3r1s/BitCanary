@@ -1,3 +1,4 @@
+// SignalR-хаб: сообщения в реальном времени, индикаторы набора, чтение и сигналы звонков.
 using System.Security.Claims;
 using Messenger.Application.Abstractions;
 using Messenger.Application.Messages;
@@ -21,7 +22,7 @@ public sealed class ChatHub(
 {
     public override async Task OnConnectedAsync()
     {
-        var userId = GetUserId();
+        var userId = GetRequiredUserId();
         connectionMappingService.Add(userId, Context.ConnectionId);
 
         await realtimeNotifier.BroadcastPresenceAsync(new PresenceChangedDto(userId, null, true), Context.ConnectionAborted);
@@ -30,7 +31,7 @@ public sealed class ChatHub(
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        var userId = GetUserId();
+        var userId = GetRequiredUserId();
         connectionMappingService.Remove(userId, Context.ConnectionId);
 
         var user = await dbContext.Users.SingleOrDefaultAsync(x => x.Id == userId, Context.ConnectionAborted);
@@ -49,7 +50,7 @@ public sealed class ChatHub(
 
     public async Task JoinChat(Guid chatId)
     {
-        var userId = GetUserId();
+        var userId = GetRequiredUserId();
         var isMember = await dbContext.ChatMemberships
             .AnyAsync(x => x.ChatId == chatId && x.UserId == userId, Context.ConnectionAborted);
 
@@ -60,6 +61,9 @@ public sealed class ChatHub(
 
         await Groups.AddToGroupAsync(Context.ConnectionId, chatId.ToString());
     }
+
+    public Task LeaveChat(Guid chatId) =>
+        Groups.RemoveFromGroupAsync(Context.ConnectionId, chatId.ToString());
 
     public async Task<MessageDto> SendMessage(SendMessageRequest request)
     {
@@ -75,22 +79,27 @@ public sealed class ChatHub(
             request.MetadataJson);
 
         var message = await messageService.SendAsync(command, Context.ConnectionAborted);
-
-        // Optimistically notify the sender that the message was delivered (broadcast succeeded)
-        await realtimeNotifier.SendMessageDeliveredAsync(message.Id, message.SenderId, Context.ConnectionAborted);
-
         return message;
     }
 
     public async Task ReadMessages(Guid chatId)
     {
-        var userId = GetUserId();
+        var userId = GetRequiredUserId();
+        var membership = await dbContext.ChatMemberships
+            .SingleOrDefaultAsync(x => x.ChatId == chatId && x.UserId == userId, Context.ConnectionAborted);
+        if (membership is null)
+        {
+            throw new HubException("User is not a member of the chat.");
+        }
+
+        membership.LastReadAtUtc = DateTimeOffset.UtcNow;
+        await dbContext.SaveChangesAsync(Context.ConnectionAborted);
         await realtimeNotifier.SendMessagesReadAsync(chatId, userId, Context.ConnectionAborted);
     }
 
     public async Task TypingIndicator(Guid chatId, bool isTyping)
     {
-        var userId = GetUserId();
+        var userId = GetRequiredUserId();
         var displayName = await dbContext.Users
             .Where(x => x.Id == userId)
             .Select(x => x.DisplayName)
@@ -111,13 +120,18 @@ public sealed class ChatHub(
 
     private Task SendCallSignal(Guid chatId, Guid toUserId, CallSignalKind kind, string payload)
     {
-        var signal = new CallSignalDto(chatId, GetUserId(), toUserId, kind, payload, DateTimeOffset.UtcNow);
+        var signal = new CallSignalDto(chatId, GetRequiredUserId(), toUserId, kind, payload, DateTimeOffset.UtcNow);
         return callService.RelaySignalAsync(signal, Context.ConnectionAborted);
     }
 
-    private Guid GetUserId()
+    private Guid GetRequiredUserId()
     {
         var value = Context.User?.FindFirstValue(ClaimTypes.NameIdentifier);
-        return Guid.TryParse(value, out var userId) ? userId : Guid.Empty;
+        if (!Guid.TryParse(value, out var userId))
+        {
+            throw new HubException("Unauthorized connection context.");
+        }
+
+        return userId;
     }
 }

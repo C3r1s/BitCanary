@@ -1,3 +1,4 @@
+// Регистрация и вход: проверка пароля (BCrypt) и выпуск JWT-токена.
 using System.Net;
 using Messenger.Application.Abstractions;
 using Messenger.Application.Common;

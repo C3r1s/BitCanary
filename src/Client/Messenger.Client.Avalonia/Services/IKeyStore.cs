@@ -1,6 +1,6 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «IKeyStore».
 namespace Messenger.Client.Avalonia.Services;
 
-/// <summary>Protects and unprotects raw key material using DPAPI (CurrentUser scope).</summary>
 public interface IKeyStore
 {
     byte[] Protect(byte[] rawKeyBytes);

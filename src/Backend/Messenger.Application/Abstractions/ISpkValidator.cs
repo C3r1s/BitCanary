@@ -1,3 +1,4 @@
+// Абстракция слоя Application BitCanary: «ISpkValidator».
 namespace Messenger.Application.Abstractions;
 
 public interface ISpkValidator

@@ -1,3 +1,4 @@
+// Доменная сущность «UserSettings»: модель данных для персистентности BitCanary.
 using Messenger.Domain.Abstractions;
 using Messenger.Shared.Contracts;
 
@@ -13,4 +14,5 @@ public sealed class UserSettings : Entity
     public bool EnableCustomEmoji { get; set; } = true;
     public bool ShowNotifications { get; set; } = true;
     public bool ShowSenderName { get; set; } = true;
+    public TerminalColorScheme TerminalColorScheme { get; set; } = TerminalColorScheme.MatrixGreen;
 }

@@ -1,3 +1,4 @@
+// Доменная сущность «UserFolderChat»: модель данных для персистентности BitCanary.
 namespace Messenger.Domain.Entities;
 
 public sealed class UserFolderChat

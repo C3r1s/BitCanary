@@ -1,3 +1,4 @@
+// Бизнес-логика чатов: участники, роли, папки, превью и права удаления.
 using System.Net;
 using Messenger.Application.Abstractions;
 using Messenger.Application.Common;
@@ -8,7 +9,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Messenger.Application.Chats;
 
-public sealed class ChatService(IAppDbContext dbContext, ICurrentUserContext currentUser) : IChatService
+public sealed class ChatService(
+    IAppDbContext dbContext,
+    ICurrentUserContext currentUser,
+    IRealtimeNotifier realtimeNotifier) : IChatService
 {
     public async Task<IReadOnlyCollection<ChatSummaryDto>> GetChatsAsync(CancellationToken cancellationToken)
     {
@@ -118,6 +122,37 @@ public sealed class ChatService(IAppDbContext dbContext, ICurrentUserContext cur
         return createdChat.ToDto(null, 0);
     }
 
+    public async Task DeleteChatAsync(Guid chatId, CancellationToken cancellationToken)
+    {
+        var callerId = currentUser.RequireUserId();
+
+        var callerMembership = await dbContext.ChatMemberships
+            .SingleOrDefaultAsync(x => x.ChatId == chatId && x.UserId == callerId, cancellationToken);
+
+        if (callerMembership is null)
+            throw new AppException("User is not a member of the chat.", HttpStatusCode.Forbidden);
+
+        var chat = await dbContext.Chats
+            .Include(x => x.Memberships)
+            .SingleOrDefaultAsync(x => x.Id == chatId, cancellationToken);
+
+        if (chat is null)
+            throw new AppException("Chat not found.", HttpStatusCode.NotFound);
+
+        if (chat.Type == ChatType.Direct)
+        {
+            dbContext.Chats.Remove(chat);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        if (callerMembership.Role != ChatRole.Owner)
+            throw new AppException("Only chat owner can delete this chat.", HttpStatusCode.Forbidden);
+
+        dbContext.Chats.Remove(chat);
+        await dbContext.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<IReadOnlyCollection<FolderDto>> GetFoldersAsync(CancellationToken cancellationToken)
     {
         var userId = currentUser.RequireUserId();
@@ -215,16 +250,15 @@ public sealed class ChatService(IAppDbContext dbContext, ICurrentUserContext cur
 
         if (userId == callerId)
         {
-            // Self-remove (leave)
             if (callerMembership.Role == ChatRole.Owner)
                 throw new AppException("Owner must transfer ownership or delete the group before leaving.", HttpStatusCode.BadRequest);
 
             dbContext.ChatMemberships.Remove(callerMembership);
             await dbContext.SaveChangesAsync(cancellationToken);
+            await realtimeNotifier.SendRemovedFromChatAsync(chatId, userId, cancellationToken);
             return;
         }
 
-        // Removing another user
         if (callerMembership.Role > ChatRole.Admin)
             throw new AppException("Only Admins and Owners can remove members.", HttpStatusCode.Forbidden);
 
@@ -242,6 +276,7 @@ public sealed class ChatService(IAppDbContext dbContext, ICurrentUserContext cur
 
         dbContext.ChatMemberships.Remove(targetMembership);
         await dbContext.SaveChangesAsync(cancellationToken);
+        await realtimeNotifier.SendRemovedFromChatAsync(chatId, userId, cancellationToken);
     }
 
     public async Task UpdateMemberRoleAsync(Guid chatId, Guid userId, ChatRole role, CancellationToken cancellationToken)

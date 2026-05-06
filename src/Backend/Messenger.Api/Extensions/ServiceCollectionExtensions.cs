@@ -1,3 +1,4 @@
+// Регистрация сервисов BitCanary API: аутентификация JWT, лимит логина, инфраструктура.
 using System.Text;
 using System.Threading.RateLimiting;
 using Messenger.Application.Abstractions;

@@ -1,3 +1,4 @@
+// Общее перечисление/константа BitCanary: «ConnectionState» (клиент + сервер).
 namespace Messenger.Shared.Contracts;
 
 public enum ConnectionState

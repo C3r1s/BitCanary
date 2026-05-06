@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «ProtocolVersionTests».
 using Messenger.Application.Messages;
 using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;

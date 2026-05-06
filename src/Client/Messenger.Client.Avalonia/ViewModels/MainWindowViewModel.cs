@@ -1,7 +1,11 @@
+// Состояние и команды UI BitCanary для «MainWindowViewModel».
+using System.IO;
 using System.Net.Http;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -24,7 +28,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly IThemeService _themeService;
     private readonly IClientSessionService _sessionService;
     private readonly KeyPublicationService _keyPublicationService;
-    private readonly ISafetyNumberService _safetyNumberService;
+    private readonly IChatSafetyNumberStore _chatSafetyNumberStore;
     private readonly IRatchetSessionRepository _sessionRepository;
     private readonly HashSet<string> _blockedSessions = new();
     private readonly Dictionary<Guid, List<MessageDto>> _messageCache = new();
@@ -34,8 +38,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private readonly ISessionManager _sessionManager;
     private Guid? _pendingNavigationChatId;
     private readonly Dictionary<Guid, MessageItemViewModel> _outgoingVmByClientId = new();
+    private readonly Dictionary<Guid, string> _sentPlaintextByMessageId = new();
     private readonly Dictionary<Guid, ChatSummaryDto> _chatSummaryCache = new();
-    // Locally deleted/cleared chats — persisted so server re-sync doesn't resurrect them
     private readonly HashSet<Guid> _deletedChatIds = new();
     private readonly Dictionary<Guid, DateTimeOffset> _clearedChats = new();
 
@@ -48,7 +52,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isConnected;
 
-    /// <summary>True once the user has authenticated and the main UI should be shown.</summary>
     [ObservableProperty]
     private bool _isLoggedIn;
 
@@ -71,6 +74,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private bool _isShowingSettings;
 
     [ObservableProperty]
+    private bool _isConfirmingDeleteChat;
+
+    [ObservableProperty]
+    private string _pendingDeleteChatTitle = string.Empty;
+
+    private Guid? _pendingDeleteChatId;
+
+    [ObservableProperty]
     private ConnectionState _connectionState;
 
     [ObservableProperty]
@@ -79,7 +90,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     [ObservableProperty]
     private string _currentUsername = string.Empty;
 
-    /// <summary>True when a username is set (user is logged in and username is non-empty).</summary>
     public bool HasCurrentUsername => !string.IsNullOrEmpty(CurrentUsername);
 
     partial void OnCurrentUsernameChanged(string value)
@@ -89,19 +99,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private DispatcherTimer? _offlineBannerTimer;
 
-    /// <summary>True when ConnectionState is Online.</summary>
     public bool IsOnline => _connectionState == Messenger.Shared.Contracts.ConnectionState.Online;
 
-    /// <summary>True when ConnectionState is Reconnecting.</summary>
     public bool IsReconnecting => _connectionState == Messenger.Shared.Contracts.ConnectionState.Reconnecting;
 
-    /// <summary>True when ConnectionState is Offline.</summary>
     public bool IsOffline => _connectionState == Messenger.Shared.Contracts.ConnectionState.Offline;
 
-    /// <summary>True when offline banner should be shown (offline and not dismissed).</summary>
     public bool ShowOfflineBanner => IsOffline && !IsOfflineBannerDismissed;
 
-    /// <summary>True when no chat is currently selected.</summary>
     public bool NoChatSelected => ChatList.SelectedChat is null;
 
     partial void OnConnectionStateChanged(Messenger.Shared.Contracts.ConnectionState value)
@@ -111,7 +116,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsOffline));
         OnPropertyChanged(nameof(ShowOfflineBanner));
 
-        // Stop the reappear timer if we go online
         if (value != Messenger.Shared.Contracts.ConnectionState.Offline)
         {
             _offlineBannerTimer?.Stop();
@@ -132,6 +136,28 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     }
 
     [RelayCommand]
+    private void CancelDeleteChat()
+    {
+        IsConfirmingDeleteChat = false;
+        PendingDeleteChatTitle = string.Empty;
+        _pendingDeleteChatId = null;
+    }
+
+    [RelayCommand]
+    private async Task ConfirmDeleteChatAsync()
+    {
+        if (_pendingDeleteChatId is null)
+        {
+            CancelDeleteChat();
+            return;
+        }
+
+        var chatId = _pendingDeleteChatId.Value;
+        CancelDeleteChat();
+        await ExecuteDeleteChatAsync(chatId);
+    }
+
+    [RelayCommand]
     private void CloseActiveChat()
     {
         ChatList.SelectedChat = null;
@@ -142,7 +168,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         IsOfflineBannerDismissed = true;
 
-        // Reappear after 30s if still offline
         _offlineBannerTimer?.Stop();
         _offlineBannerTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
         _offlineBannerTimer.Tick += (_, _) =>
@@ -189,7 +214,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         IThemeService themeService,
         IClientSessionService sessionService,
         KeyPublicationService keyPublicationService,
-        ISafetyNumberService safetyNumberService,
+        IChatSafetyNumberStore chatSafetyNumberStore,
         IRatchetSessionRepository sessionRepository,
         IIdentityKeyChangeDetector changeDetector,
         ILocalSearchService localSearchService,
@@ -204,7 +229,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _themeService = themeService;
         _sessionService = sessionService;
         _keyPublicationService = keyPublicationService;
-        _safetyNumberService = safetyNumberService;
+        _chatSafetyNumberStore = chatSafetyNumberStore;
         _sessionRepository = sessionRepository;
         _localSearchService = localSearchService;
         _localMessageRepository = localMessageRepository;
@@ -212,23 +237,31 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _sessionManager = sessionManager;
 
         SafetyNumber = new SafetyNumberViewModel(
-            _safetyNumberService,
+            _chatSafetyNumberStore,
             _sessionRepository,
-            () => IsShowingSafetyNumber = false,
-            () => ChatWindow.IsSessionVerified = true);
+            () => IsShowingSafetyNumber = false);
+        SafetyNumber.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(SafetyNumberViewModel.IsVerified) &&
+                ChatList.SelectedChat?.Type == ChatType.Direct)
+            {
+                ChatWindow.IsSessionVerified = SafetyNumber.IsVerified;
+            }
+        };
 
         ChatList = new ChatListViewModel(RefreshRemoteDataAsync);
 
-        // Wire global search
-        var searchVm = new SearchViewModel(_localSearchService, NavigateToSearchResult);
+        var searchVm = new SearchViewModel(
+            _localSearchService,
+            NavigateToSearchResult,
+            (query, ct) => _apiClient.SearchUsersAsync(query, ct),
+            user => _ = HandleUserSelectedAsync(user));
         ChatList.Search = searchVm;
         ToggleGlobalSearchCommand = new RelayCommand(() => ChatList.ToggleSearchCommand.Execute(null));
 
-        // Wire user-directory search
         var userSearchVm = new UserSearchViewModel(_apiClient, HandleUserSelectedAsync);
         ChatList.UserSearch = userSearchVm;
 
-        // Wire group creation
         var groupCreationVm = new GroupCreationViewModel(
             (query, ct) => _apiClient.SearchUsersAsync(query, ct),
             HandleGroupCreatedAsync);
@@ -250,15 +283,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             }
         };
 
-        // Wire ShowSafetyNumberCommand into ChatWindow so header can bind to it
         ChatWindow.ShowSafetyNumberCommand = ShowSafetyNumberCommand;
 
-        // Wire GroupInfoViewModel into ChatWindow for group chat member management
         var groupInfoVm = new GroupInfoViewModel(
             (chatId, userId) => _apiClient.AddMemberAsync(chatId, userId),
             (chatId, userId) => _apiClient.RemoveMemberAsync(chatId, userId),
             (chatId, userId, role) => _apiClient.UpdateMemberRoleAsync(chatId, userId, role),
             (chatId, req) => _apiClient.UpdateChatAsync(chatId, req),
+            (q, ct) => _apiClient.SearchUsersAsync(q, ct),
             () => ChatWindow.IsGroupInfoVisible = false);
         ChatWindow.GroupInfo = groupInfoVm;
         ChatWindow.ShowGroupInfoCommand = new RelayCommand(() => ChatWindow.IsGroupInfoVisible = !ChatWindow.IsGroupInfoVisible);
@@ -295,6 +327,7 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _realtimeClient.OtpkSupplyLow += HandleOtpkSupplyLowAsync;
         _realtimeClient.MessageDelivered += HandleMessageDeliveredAsync;
         _realtimeClient.MessagesRead += HandleMessagesReadAsync;
+        _realtimeClient.RemovedFromChat += HandleRemovedFromChatAsync;
         _realtimeClient.ReconnectedAndNeedsRefresh += HandleReconnectedAsync;
         _realtimeClient.ConnectionStateChanged += state => ConnectionState = state;
 
@@ -315,11 +348,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         IsShowingDebugError = true;
     }
 
-    /// <summary>
-    /// Public entry point used by the global exception handler. Formats the exception
-    /// into a user-readable block and shows the fatal-error overlay on the UI thread.
-    /// Safe to call from any thread.
-    /// </summary>
     public void ShowFatalError(string source, Exception ex)
     {
         var text =
@@ -351,26 +379,27 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void NavigateToSearchResult(SearchResultItemViewModel result)
     {
-        // Close global search mode
         ChatList.IsSearchMode = false;
         ChatList.Search?.Reset();
 
-        // Find and select the chat matching result.ChatId
         var chatItem = ChatList.Chats.FirstOrDefault(c => c.Id == result.ChatId);
         if (chatItem is not null)
         {
             ChatList.SelectedChat = chatItem;
         }
-        // v1: navigating to the chat is sufficient; scrolling to specific message is a stretch goal
     }
 
     private async Task HandleUserSelectedAsync(UserProfileDto selectedUser)
     {
-        // D-02: find existing direct chat with this peer
         var existing = ChatList.Chats.FirstOrDefault(c =>
             c.Type == Messenger.Shared.Contracts.ChatType.Direct && c.PeerUserId == selectedUser.Id);
+        if (existing is not null)
+        {
+            CloseSearchModes();
+            ChatList.SelectedChat = existing;
+            return;
+        }
 
-        // BUG-02 fallback: if PeerUserId is empty in local list, check server
         if (existing is null)
         {
             var allChats = await _apiClient.GetChatsAsync();
@@ -380,14 +409,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             
             if (existingChat is not null)
             {
-                ChatList.IsUserSearchMode = false;
-                ChatList.UserSearch?.Reset();
+                CloseSearchModes();
                 NavigateToChatAsync(existingChat.Id);
                 return;
             }
         }
 
-        // No existing chat — create one via API
         if (ChatList.UserSearch is not null)
             ChatList.UserSearch.IsBusy = true;
         try
@@ -400,11 +427,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             var newChat = await _apiClient.CreateChatAsync(request);
 
-            // Refresh chat list so new chat appears, then navigate
-            // Per Pitfall 6: await refresh, THEN navigate — safe sequence
             await RefreshRemoteDataAsync();
-            ChatList.IsUserSearchMode = false;
-            ChatList.UserSearch?.Reset();
+            CloseSearchModes();
             NavigateToChatAsync(newChat.Id);
         }
         catch
@@ -422,6 +446,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
+    private void CloseSearchModes()
+    {
+        ChatList.IsSearchMode = false;
+        ChatList.Search?.Reset();
+        ChatList.IsUserSearchMode = false;
+        ChatList.UserSearch?.Reset();
+    }
+
     private async Task HandleGroupCreatedAsync(Messenger.Shared.Contracts.Dtos.CreateChatRequest request)
     {
         ChatList.IsGroupCreationMode = false;
@@ -431,16 +463,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         NavigateToChatAsync(newChat.Id);
     }
 
-    /// <summary>
-    /// Navigates to the chat matching <paramref name="chatId"/>.
-    /// If the chat list is not yet populated (cold-start toast activation),
-    /// stores the id as a pending navigation and retries after initialization.
-    /// </summary>
     public void NavigateToChatAsync(Guid chatId)
     {
         if (ChatList.Chats.Count == 0)
         {
-            // Cold-start guard (RESEARCH.md Pitfall 3): chats not loaded yet.
             _pendingNavigationChatId = chatId;
             return;
         }
@@ -455,14 +481,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void Logout()
     {
-        // FIX-04: dismiss Settings modal before tearing down session so it cannot bleed onto the login screen.
         IsShowingSettings = false;
 
-        // Capture userId before ClearSession() zeroes it — needed for user-scoped cache invalidation.
         var userId = _sessionService.CurrentUserId;
         _sessionService.ClearSession();
 
-        // Clear all in-memory state so no previous user's data leaks into the next session.
         ChatList.SelectedChat = null;          // must be nulled explicitly — Chats.Clear() does not reset this
         ChatList.Chats.Clear();
         ChatList.IsSearchMode = false;
@@ -475,7 +498,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         _deletedChatIds.Clear();
         _clearedChats.Clear();
 
-        // Invalidate the user-scoped chats cache so a subsequent login (any user) loads fresh data.
         _ = _localCacheService.SaveAsync(ChatsKey(userId), Array.Empty<ChatSummaryDto>());
         IsLoggedIn = false;
         CurrentUsername = string.Empty;
@@ -527,7 +549,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             IsBusy = false;
         }
 
-        // Flush cold-start pending navigation (RESEARCH.md Pitfall 3)
         if (_pendingNavigationChatId.HasValue)
         {
             var pending = _pendingNavigationChatId.Value;
@@ -536,10 +557,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>Connect SignalR, publish encryption keys, sync chats, and update status. Called after login or on startup.</summary>
     private async Task ConnectAndLoadAsync()
     {
-        // Ensure encryption keys are published before connecting (D-07)
         StatusMessage = "Checking encryption keys...";
         try
         {
@@ -552,7 +571,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             StatusMessage = "Key upload failed -- messages may use legacy encryption";
         }
 
-        // Connect SignalR. Failures are non-fatal for data loading — we still fetch chats via HTTP below.
         try
         {
             await _realtimeClient.ConnectAsync();
@@ -562,15 +580,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
         catch (HttpRequestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.Unauthorized)
         {
-            // Token is likely expired or invalid. Force logout — skip data fetch.
             Logout();
             StatusMessage = "Your session has expired. Please log in again.";
             return;
         }
         catch (Exception ex)
         {
-            // D-10: Any SignalR failure (network, InvalidOperationException from stale connection, etc.)
-            // → offline mode. Still attempt RefreshRemoteDataAsync so the HTTP API can serve cached data.
             ConnectionState = Messenger.Shared.Contracts.ConnectionState.Offline;
             IsConnected = false;
             Settings.ConnectionStatus = "Offline — showing cached data";
@@ -588,8 +603,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private async void HandleReconnectedAsync()
     {
-        // Called when SignalR reconnects after dropping — refresh data to catch missed messages.
-        // ConnectionState is already set to Online by the ConnectionStateChanged subscription above.
         await RefreshRemoteDataAsync();
     }
 
@@ -597,10 +610,8 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
-            // 1. Add sessionId to blocked set
             _blockedSessions.Add(sessionId);
 
-            // 2. Update MessageInput block state if current chat matches
             var currentSessionId = GetCurrentSessionId();
             if (currentSessionId == sessionId)
             {
@@ -608,7 +619,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 MessageInput.NotifyBlockStateChanged();
             }
 
-            // 3. Inject banner into ChatWindow.Messages if current chat matches
             if (currentSessionId == sessionId)
             {
                 var banner = MessageItemViewModel.CreateBanner(
@@ -624,14 +634,12 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     {
         _blockedSessions.Remove(sessionId);
 
-        // If this is the current chat, re-enable send
         if (GetCurrentSessionId() == sessionId)
         {
             MessageInput.IsBlockedForKeyVerification = false;
             MessageInput.NotifyBlockStateChanged();
         }
 
-        // Do NOT mark session as verified — "Send Anyway" explicitly does not verify (per UI-SPEC)
     }
 
     private async Task RefreshRemoteDataAsync()
@@ -656,8 +664,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
             StatusMessage = $"Synced {chats.Count} chats.";
 
-            // Index all messages in background so FTS5 search works across all chats,
-            // not just ones the user has manually opened.
             _ = Task.Run(IndexAllChatsForSearchAsync);
         }
         finally
@@ -666,11 +672,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// Fetches messages for every chat and runs them through DecryptAsync so
-    /// plaintext_body is written to SQLite and FTS5 picks them up.
-    /// Runs fire-and-forget after RefreshRemoteDataAsync.
-    /// </summary>
     private async Task IndexAllChatsForSearchAsync()
     {
         if (!_sessionService.IsAuthenticated) return;
@@ -683,10 +684,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 foreach (var msg in messages)
                 {
                     try { await _encryptionService.DecryptAsync(msg); }
-                    catch { /* ignore individual decrypt errors */ }
+                    catch {  }
                 }
             }
-            catch { /* ignore API errors (e.g. offline) */ }
+            catch {  }
         }
     }
 
@@ -724,19 +725,24 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         StatusMessage = $"Loading {selectedChat.Title}...";
 
-        // Reset unread count when opening chat (per D-07)
         selectedChat.UnreadCount = 0;
         await _localMessageRepository.ResetUnreadCountAsync(selectedChat.Id);
 
-        // Load verification state for this session
-        var sessionId = GetCurrentSessionId();
-        if (!string.IsNullOrEmpty(sessionId))
+        if (selectedChat.Type == ChatType.Direct)
         {
-            var verState = await _sessionRepository.LoadVerificationStateAsync(sessionId);
-            ChatWindow.IsSessionVerified = verState.Verified;
+            var sessionId = GetCurrentSessionId();
+            if (!string.IsNullOrEmpty(sessionId))
+            {
+                var verified = await TryAutoVerifyDirectChatAsync(selectedChat, sessionId);
+                ChatWindow.IsSessionVerified = verified;
 
-            // Re-evaluate block state per session (Pitfall 4: must not share block state across chats)
-            MessageInput.IsBlockedForKeyVerification = _blockedSessions.Contains(sessionId);
+                MessageInput.IsBlockedForKeyVerification = _blockedSessions.Contains(sessionId);
+            }
+            else
+            {
+                ChatWindow.IsSessionVerified = false;
+                MessageInput.IsBlockedForKeyVerification = false;
+            }
         }
         else
         {
@@ -744,7 +750,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             MessageInput.IsBlockedForKeyVerification = false;
         }
 
-        // Notify message input so CanSend re-evaluates for the new chat
         MessageInput.NotifyBlockStateChanged();
 
         var cacheKey = GetMessageCacheKey(selectedChat.Id);
@@ -762,17 +767,14 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             try
             {
                 var messages = await _apiClient.GetMessagesAsync(selectedChat.Id);
-                // Filter out messages cleared locally — show only those created after the clear timestamp
                 var filteredMessages = _clearedChats.TryGetValue(selectedChat.Id, out var clearedAt)
                     ? messages.Where(m => m.CreatedAtUtc > clearedAt).ToList()
                     : (IReadOnlyCollection<MessageDto>)messages;
                 await ReplaceMessagesAsync(selectedChat.Id, filteredMessages);
                 await _localCacheService.SaveAsync(cacheKey, filteredMessages);
                 await _realtimeClient.JoinChatAsync(selectedChat.Id);
-                // Notify senders that their messages have been read (D-03, D-07)
                 await _realtimeClient.SendReadReceiptAsync(selectedChat.Id);
 
-                // Load group info panel for group chats
                 if (selectedChat.IsGroupChat && ChatWindow.GroupInfo is not null)
                 {
                     _chatSummaryCache.TryGetValue(selectedChat.Id, out var summary);
@@ -787,13 +789,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                                            or TaskCanceledException
                                            or OperationCanceledException)
             {
-                // Server unreachable or network error — show cached messages and continue (D-11)
                 StatusMessage = $"{selectedChat.Title} (offline — showing cached messages)";
             }
             catch (Microsoft.AspNetCore.SignalR.HubException ex)
             {
-                // JoinChat hub call rejected (e.g. server-side membership race on a newly created chat).
-                // Messages were already loaded above; chat remains usable, just without real-time join ack.
                 StatusMessage = $"{selectedChat.Title} ready (sync issue: {ex.Message})";
             }
         }
@@ -808,44 +807,94 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         var selectedChat = ChatList.SelectedChat;
         if (selectedChat is null) return;
 
-        var bundle = await _apiClient.GetKeyBundleAsync(selectedChat.PeerUserId);
-        if (bundle is null)
-        {
-            StatusMessage = $"Safety number unavailable — {selectedChat.Title} has not published their key bundle yet";
-            return;
-        }
-
         var sessionId = GetCurrentSessionId();
-        byte[] localIkPublic;
-        try
+        bool canRegenerate = selectedChat.Type == ChatType.Direct || IsChatOwner(selectedChat.Id);
+
+        if (selectedChat.Type == ChatType.Direct && !string.IsNullOrEmpty(sessionId))
         {
-            localIkPublic = _keyPublicationService.LocalBundle.IkPublic;
-        }
-        catch (InvalidOperationException)
-        {
-            StatusMessage = "Safety number unavailable — please restart the app";
-            return;
+            var verified = await TryAutoVerifyDirectChatAsync(selectedChat, sessionId);
+            ChatWindow.IsSessionVerified = verified;
         }
 
         await SafetyNumber.LoadAsync(
+            _sessionService.CurrentUserId,
+            selectedChat.Id,
+            canRegenerate,
             sessionId,
-            selectedChat.Title,
-            localIkPublic,
-            _sessionService.CurrentUserId.ToString("D"),
-            bundle.IkPublic,
-            selectedChat.PeerUserId.ToString("D"));
+            selectedChat.Title);
 
         IsShowingSafetyNumber = true;
+    }
+
+    private async Task<bool> TryAutoVerifyDirectChatAsync(ChatListItemViewModel chat, string sessionId)
+    {
+        if (chat.Type != ChatType.Direct) return false;
+        if (chat.PeerUserId == Guid.Empty) return false;
+        if (string.IsNullOrEmpty(sessionId)) return false;
+
+        try
+        {
+            var verState = await _sessionRepository.LoadVerificationStateAsync(sessionId);
+            var bundle = await _apiClient.GetKeyBundleAsync(chat.PeerUserId);
+            if (bundle is null || bundle.IkPublic is null || bundle.IkPublic.Length == 0)
+            {
+                return verState.Verified;
+            }
+
+            bool ikMatchesStored =
+                verState.RemoteIkPublic is not null &&
+                verState.RemoteIkPublic.Length == bundle.IkPublic.Length &&
+                CryptographicOperations.FixedTimeEquals(verState.RemoteIkPublic, bundle.IkPublic);
+
+            if (verState.RemoteIkPublic is null)
+            {
+                await _sessionRepository.SaveVerificationStateAsync(
+                    sessionId,
+                    verified: true,
+                    lastVerifiedAt: DateTimeOffset.UtcNow,
+                    remoteIkPublic: bundle.IkPublic);
+                return true;
+            }
+
+            if (ikMatchesStored)
+            {
+                if (!verState.Verified)
+                {
+                    await _sessionRepository.SaveVerificationStateAsync(
+                        sessionId,
+                        verified: true,
+                        lastVerifiedAt: DateTimeOffset.UtcNow,
+                        remoteIkPublic: bundle.IkPublic);
+                }
+                return true;
+            }
+
+            return false;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private bool IsChatOwner(Guid chatId)
+    {
+        if (!_chatSummaryCache.TryGetValue(chatId, out var chat))
+            return false;
+
+        var self = chat.Members?.FirstOrDefault(m => m.UserId == _sessionService.CurrentUserId);
+        return self?.Role == ChatRole.Owner;
     }
 
     private string GetCurrentSessionId()
     {
         var selected = ChatList.SelectedChat;
         if (selected is null) return string.Empty;
+        if (selected.Type != ChatType.Direct) return string.Empty;
         return $"{_sessionService.CurrentUserId}:{selected.PeerUserId}";
     }
 
-    private async Task SendMessageAsync(string plaintext)
+    private async Task SendMessageAsync(ChatSendPayload payload)
     {
         var selectedChat = ChatList.SelectedChat;
         if (selectedChat is null)
@@ -853,15 +902,25 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        if (payload.ImageAttachment is null && string.IsNullOrWhiteSpace(payload.Text))
+        {
+            return;
+        }
+
         if (!_sessionService.IsAuthenticated)
         {
+            var demoBody = payload.ImageAttachment is not null
+                ? (string.IsNullOrWhiteSpace(payload.Text) ? "📷" : $"📷 {payload.Text}")
+                : payload.Text;
+            if (string.IsNullOrWhiteSpace(demoBody)) return;
+
             var demoMessage = new MessageDto(
                 Guid.NewGuid(),
                 selectedChat.Id,
                 Guid.Empty,
                 _sessionService.UserName,
                 MessageKind.Text,
-                plaintext,
+                demoBody,
                 "plaintext-demo",
                 "demo-envelope",
                 null,
@@ -873,17 +932,56 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return;
         }
 
+        Guid? mediaId = null;
+        var sentMessageKind = MessageKind.Text;
+        if (payload.ImageAttachment is not null)
+        {
+            await using var uploadStream = await payload.ImageAttachment.OpenReadAsync();
+            var upload = await _apiClient.UploadMediaAsync(
+                payload.ImageAttachment.Name,
+                ImageSendFormats.GuessContentType(payload.ImageAttachment.Name),
+                uploadStream);
+            mediaId = upload.MediaId;
+            sentMessageKind = MessageKind.Image;
+        }
+
+        var plaintextBody = sentMessageKind == MessageKind.Image
+            ? (string.IsNullOrWhiteSpace(payload.Text) ? " " : payload.Text.Trim())
+            : payload.Text;
+
         var clientMessageId = Guid.NewGuid();
 
-        // D-04: Add optimistic VM to UI immediately — before encryption and POST
+        Bitmap? optimisticBitmap = null;
+        if (payload.ImageAttachment is not null)
+        {
+            try
+            {
+                await using var previewStream = await payload.ImageAttachment.OpenReadAsync();
+                optimisticBitmap = await Task.Run(() => new Bitmap(previewStream));
+            }
+            catch
+            {
+                optimisticBitmap?.Dispose();
+                optimisticBitmap = null;
+            }
+        }
+
+        var displayCaption = sentMessageKind == MessageKind.Image
+            ? (string.IsNullOrWhiteSpace(payload.Text) ? string.Empty : payload.Text.Trim())
+            : plaintextBody;
+
         var optimisticVm = new MessageItemViewModel
         {
             Id = Guid.Empty,  // No server ID yet
             ClientMessageId = clientMessageId,
-            SenderDisplayName = _sessionService.UserName,
-            DisplayText = plaintext,
+            SenderDisplayName = $"<@{_sessionService.UserName}>",
+            DisplayText = displayCaption,
+            MessageKind = sentMessageKind,
+            MediaId = mediaId,
+            InlineImage = optimisticBitmap,
             Timestamp = DateTimeOffset.UtcNow.LocalDateTime.ToShortTimeString(),
             IsOutgoing = true,
+            IsEncrypted = true,
             Status = MessageStatus.Sending
         };
         optimisticVm.SetRetryDelegate(RetryMessageAsync);
@@ -900,34 +998,33 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         try
         {
             var recipientUserId = selectedChat.PeerUserId;
-            var (encrypted, isPlaintext) = await BuildEncryptedDraftAsync(plaintext, recipientUserId);
+            var (encrypted, isPlaintext) = await BuildEncryptedDraftAsync(plaintextBody, recipientUserId);
             var request = new SendMessageRequest(
                 selectedChat.Id,
                 clientMessageId,
-                encrypted.Kind,
+                sentMessageKind,
                 encrypted.EncryptedPayload,
                 encrypted.EncryptionAlgorithm,
                 encrypted.KeyEnvelope,
-                null,
+                mediaId,
                 null,
                 encrypted.MetadataJson,
-                isPlaintext ? ProtocolVersion.Plaintext : ProtocolVersion.SignalProtocol);
+                isPlaintext ? ProtocolVersion.Plaintext : ProtocolVersion.NoiseXX);
 
             var message = await _apiClient.SendMessageAsync(request);
+            _sentPlaintextByMessageId[message.Id] = plaintextBody;
 
-            // Remove tracking entry — server confirmed
             _outgoingVmByClientId.Remove(clientMessageId);
 
-            // Replace the optimistic "Sending" VM with the server-confirmed one.
-            // Without this, the sending bubble stays alongside the real confirmed message.
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 if (ChatList.SelectedChat?.Id == selectedChat.Id)
                     ChatWindow.Messages.Remove(optimisticVm);
             });
 
-            // D-08: Only persist server-confirmed messages to SQLite
             await AppendMessageAsync(message);
+            await _localMessageRepository.SaveMessageAsync(message, (int)request.ProtocolVersion);
+            await _localMessageRepository.UpdatePlaintextBodyAsync(message.Id, plaintextBody);
             await PersistMessagesAsync(selectedChat.Id);
         }
         catch (Exception ex) when (ex is HttpRequestException
@@ -935,9 +1032,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                                        or TaskCanceledException
                                        or System.Security.Cryptography.CryptographicException)
         {
-            // D-04/D-05: Mark the in-flight VM as failed — covers network errors
-            // and ratchet session errors (CryptographicException from SessionManager).
-            // Note: InvalidOperationException removed — no-keys case now handled by BuildEncryptedDraftAsync (FEA-03).
             _outgoingVmByClientId.Remove(clientMessageId);
             System.Diagnostics.Debug.WriteLine($"[SendMessageAsync] Failed: {ex.GetType().Name}: {ex.Message}");
             await Dispatcher.UIThread.InvokeAsync(() =>
@@ -949,19 +1043,15 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// Re-sends a failed message using the same ClientMessageId.
-    /// Server-side dedup on ClientMessageId makes this safe even if the original
-    /// POST reached the server — the second call is a no-op on the server.
-    /// Per D-06: immediate retry, no queuing.
-    /// </summary>
     private async Task RetryMessageAsync(Guid clientMessageId)
     {
-        // Find the failed optimistic VM by ClientMessageId
         var vm = ChatWindow.Messages
             .OfType<MessageItemViewModel>()
             .FirstOrDefault(m => m.ClientMessageId == clientMessageId);
         if (vm is null) return;
+
+        if (vm.MessageKind != MessageKind.Text)
+            return;
 
         var selectedChat = ChatList.SelectedChat;
         if (selectedChat is null) return;
@@ -983,16 +1073,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 null,
                 null,
                 encrypted.MetadataJson,
-                isPlaintext ? ProtocolVersion.Plaintext : ProtocolVersion.SignalProtocol);
+                isPlaintext ? ProtocolVersion.Plaintext : ProtocolVersion.NoiseXX);
 
             var message = await _apiClient.SendMessageAsync(request);
+            _sentPlaintextByMessageId[message.Id] = plaintext;
 
-            // Remove the stale optimistic VM before adding the server-confirmed one.
-            // Without this, the failed bubble stays on screen as a ghost alongside the real message.
             await Dispatcher.UIThread.InvokeAsync(() => ChatWindow.Messages.Remove(vm));
 
-            // Success — persist server-confirmed message
             await AppendMessageAsync(message);
+            await _localMessageRepository.SaveMessageAsync(message, (int)request.ProtocolVersion);
+            await _localMessageRepository.UpdatePlaintextBodyAsync(message.Id, plaintext);
             await PersistMessagesAsync(selectedChat.Id);
         }
         catch (Exception ex) when (ex is HttpRequestException
@@ -1000,9 +1090,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                                        or TaskCanceledException
                                        or System.Security.Cryptography.CryptographicException)
         {
-            // Covers network errors and ratchet session errors.
-            // Note: InvalidOperationException removed — no-keys case now handled by BuildEncryptedDraftAsync (FEA-03).
-            // Revert VM status to Failed so the retry button remains visible.
             System.Diagnostics.Debug.WriteLine($"[RetryMessageAsync] Failed: {ex.GetType().Name}: {ex.Message}");
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -1013,16 +1100,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
     }
 
-    /// <summary>
-    /// Probes for an existing ratchet session. If one exists, encrypts normally.
-    /// If no session and no key bundle, falls back to plaintext (FEA-03).
-    /// </summary>
     private async Task<(EncryptedMessageDraft draft, bool isPlaintext)> BuildEncryptedDraftAsync(
         string plaintext, Guid recipientUserId, CancellationToken cancellationToken = default)
     {
         var sessionId = $"{_sessionService.CurrentUserId}:{recipientUserId}";
 
-        // If a ratchet session exists, encrypt directly — no bundle probe needed
         var existingSession = await _sessionManager.GetSessionAsync(sessionId, cancellationToken);
         if (existingSession is not null)
         {
@@ -1030,11 +1112,9 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return (draft, isPlaintext: false);
         }
 
-        // No session — probe for key bundle
         var bundle = await _apiClient.GetKeyBundleAsync(recipientUserId, cancellationToken);
         if (bundle is null)
         {
-            // No keys published — plaintext fallback (FEA-03)
             var plaintextDraft = new EncryptedMessageDraft(
                 MessageKind.Text,
                 plaintext,
@@ -1044,7 +1124,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             return (plaintextDraft, isPlaintext: true);
         }
 
-        // Keys available — encrypt normally (X3DH will run inside EncryptTextAsync)
         var encryptedDraft = await _encryptionService.EncryptTextAsync(plaintext, recipientUserId, cancellationToken);
         return (encryptedDraft, isPlaintext: false);
     }
@@ -1062,14 +1141,16 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private async Task ChangeThemeAsync(ThemePreference themePreference)
     {
         _themeService.Apply(themePreference);
+        var terminalScheme = Settings.SelectedTerminalScheme?.Value ?? TerminalColorScheme.MatrixGreen;
 
         var settings = new UpdateSettingsRequest(
             themePreference,
             Settings.SendByEnter,
-            Settings.UseCompactMode,
+            false,
             Settings.EnableCustomEmoji,
             Settings.ShowNotifications,
-            Settings.ShowSenderName);
+            Settings.ShowSenderName,
+            terminalScheme);
 
         if (_sessionService.IsAuthenticated)
         {
@@ -1079,10 +1160,11 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         await _localCacheService.SaveAsync(SettingsKey(), new UserSettingsDto(
             themePreference,
             Settings.SendByEnter,
-            Settings.UseCompactMode,
+            false,
             Settings.EnableCustomEmoji,
             Settings.ShowNotifications,
-            Settings.ShowSenderName));
+            Settings.ShowSenderName,
+            terminalScheme));
     }
 
     private async Task HandleIncomingMessageAsync(MessageDto message)
@@ -1098,7 +1180,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         _notificationService.ShowIfMinimized(message.ChatId, chatItem?.Title);
 
-        // BUG-01 fix: refresh chat list to fetch new chats from server
         if (ChatList.RefreshCommand.CanExecute(null))
         {
             await ChatList.RefreshCommand.ExecuteAsync(null);
@@ -1140,14 +1221,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 message.Status = MessageStatus.Delivered;
             }
         });
+        UpdateCachedMessageStatus(messageId, MessageStatus.Delivered);
 
-        // Persist the status update to SQLite
         await _localMessageRepository.UpdateMessageStatusAsync(messageId, MessageStatus.Delivered);
     }
 
     private async Task HandleMessagesReadAsync(Guid chatId, Guid readByUserId)
     {
-        // Don't update status if the reader is the current user (their own messages aren't "read" by themselves)
         if (readByUserId == _sessionService.CurrentUserId) return;
 
         await Dispatcher.UIThread.InvokeAsync(() =>
@@ -1163,9 +1243,68 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 }
             }
         });
+        UpdateCachedOutgoingStatuses(chatId, MessageStatus.Read);
 
-        // Persist all outgoing messages as read in SQLite
         await _localMessageRepository.MarkMessagesReadAsync(chatId, _sessionService.CurrentUserId);
+    }
+
+    private async Task HandleRemovedFromChatAsync(Guid chatId)
+    {
+        try
+        {
+            await _realtimeClient.LeaveChatAsync(chatId);
+        }
+        catch
+        {
+        }
+
+        _messageCache.Remove(chatId);
+        _chatSummaryCache.Remove(chatId);
+        _clearedChats.Remove(chatId);
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (ChatList.SelectedChat?.Id == chatId)
+            {
+                ChatWindow.IsGroupInfoVisible = false;
+                ChatList.SelectedChat = null;
+            }
+
+            var item = ChatList.Chats.FirstOrDefault(c => c.Id == chatId);
+            if (item is not null)
+            {
+                ChatList.Chats.Remove(item);
+            }
+        });
+    }
+
+    private void UpdateCachedMessageStatus(Guid messageId, MessageStatus status)
+    {
+        foreach (var (chatId, messages) in _messageCache)
+        {
+            var index = messages.FindIndex(m => m.Id == messageId);
+            if (index < 0) continue;
+            var current = messages[index];
+            if (current.Status >= status) return;
+            messages[index] = current with { Status = status };
+            _ = PersistMessagesAsync(chatId);
+            return;
+        }
+    }
+
+    private void UpdateCachedOutgoingStatuses(Guid chatId, MessageStatus status)
+    {
+        if (!_messageCache.TryGetValue(chatId, out var messages)) return;
+        var changed = false;
+        for (var i = 0; i < messages.Count; i++)
+        {
+            var current = messages[i];
+            if (current.SenderId != _sessionService.CurrentUserId || current.Status >= status) continue;
+            messages[i] = current with { Status = status };
+            changed = true;
+        }
+        if (changed)
+            _ = PersistMessagesAsync(chatId);
     }
 
     private async Task LoadCachedSettingsAsync()
@@ -1207,11 +1346,13 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
     private void ApplySettings(UserSettingsDto settings)
     {
-        _themeService.Apply(settings.ThemePreference);
-        Settings.SelectedThemeOption = Settings.ThemeOptions.FirstOrDefault(x => x.Value == settings.ThemePreference)
+        _themeService.Apply(ThemePreference.Terminal);
+        Settings.SelectedThemeOption = Settings.ThemeOptions.FirstOrDefault(x => x.Value == ThemePreference.Terminal)
                                     ?? Settings.ThemeOptions[0];
+
+        Settings.SelectTerminalSchemeFromSettings(settings.TerminalColorScheme);
+
         Settings.SendByEnter = settings.SendByEnter;
-        Settings.UseCompactMode = settings.UseCompactMode;
         Settings.EnableCustomEmoji = settings.EnableCustomEmoji;
         Settings.ShowNotifications = settings.ShowNotifications;
         Settings.ShowSenderName = settings.ShowSenderName;
@@ -1224,13 +1365,10 @@ public sealed partial class MainWindowViewModel : ViewModelBase
 
         foreach (var chat in chats)
         {
-            // Skip locally deleted chats — don't re-add from server
             if (_deletedChatIds.Contains(chat.Id)) continue;
 
-            // Persist chat to SQLite so FTS5 search JOIN resolves chat names
             await _localMessageRepository.UpsertChatAsync(chat);
 
-            // Determine peer for 1-to-1 chats (used for E2E encryption recipient)
             var peer = chat.Members?.FirstOrDefault(m => m.UserId != _sessionService.CurrentUserId);
 
             string decryptedSubtitle;
@@ -1250,7 +1388,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
                 }
             }
 
-            // For group chats, show member count as subtitle; for direct chats use last message preview
             var isGroup = chat.Type == Messenger.Shared.Contracts.ChatType.Group;
             string subtitle;
             if (isGroup)
@@ -1285,8 +1422,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             _chatSummaryCache[chat.Id] = chat;
         }
 
-        // Preserve existing selection — don't auto-select first chat
-        // ChatList.SelectedChat ??= ChatList.Chats.FirstOrDefault();
     }
 
     private async Task ReplaceMessagesAsync(Guid chatId, IReadOnlyCollection<MessageDto> messages)
@@ -1299,7 +1434,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             await AppendMessageToWindowAsync(message);
         }
 
-        // FEA-03: recalculate unverified state from loaded history (Pitfall 3)
         await Dispatcher.UIThread.InvokeAsync(() =>
         {
             ChatWindow.IsUnverified = messages.Any(m => m.ProtocolVersion == ProtocolVersion.Plaintext);
@@ -1335,29 +1469,83 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         }
 
         string displayText;
-        try
+        if (message.SenderId == _sessionService.CurrentUserId &&
+            _sentPlaintextByMessageId.TryGetValue(message.Id, out var ownPlaintext))
         {
-            displayText = await _encryptionService.DecryptAsync(message);
+            displayText = ownPlaintext;
         }
-        catch
+        else
         {
-            displayText = "[Unable to decrypt]";
+            try
+            {
+                displayText = await _encryptionService.DecryptAsync(message);
+            }
+            catch
+            {
+                displayText = "[Unable to decrypt]";
+            }
         }
 
-        ChatWindow.Messages.Add(new MessageItemViewModel
+        if (message.Kind == MessageKind.Text && ImageSendFormats.IsLegacyImageFileLine(displayText))
+        {
+            displayText = "📷";
+        }
+
+        if (message.Kind == MessageKind.Image)
+        {
+            var t = displayText.Trim('\u200b', ' ', '\t', '\r', '\n');
+            if (t.Length == 0)
+                displayText = string.Empty;
+            else
+                displayText = t;
+        }
+
+        var isGroupChatMessage =
+            (_chatSummaryCache.TryGetValue(message.ChatId, out var chatSummary) && chatSummary.Type != ChatType.Direct)
+            || ChatList.Chats.FirstOrDefault(c => c.Id == message.ChatId)?.IsGroupChat == true;
+
+        var vm = new MessageItemViewModel
         {
             Id = message.Id,
             ClientMessageId = Guid.NewGuid(),
-            SenderDisplayName = $"<@{message.SenderDisplayName}",
+            SenderDisplayName = $"<@{message.SenderDisplayName}>",
             DisplayText = displayText,
+            MessageKind = message.Kind,
+            MediaId = message.MediaId,
             Timestamp = message.CreatedAtUtc.LocalDateTime.ToShortTimeString(),
-            IsOutgoing = message.SenderId == _sessionService.CurrentUserId
-        });
+            IsOutgoing = message.SenderId == _sessionService.CurrentUserId,
+            IsGroupChat = isGroupChatMessage,
+            IsEncrypted = message.ProtocolVersion == ProtocolVersion.SignalProtocol ||
+                          message.ProtocolVersion == ProtocolVersion.NoiseXX ||
+                          message.EncryptionAlgorithm.Equals("signal-protocol-v1", StringComparison.OrdinalIgnoreCase) ||
+                          message.EncryptionAlgorithm.Equals("noise-xx-dr-v1", StringComparison.OrdinalIgnoreCase),
+            Status = message.Status
+        };
+        vm.SetRetryDelegate(RetryMessageAsync);
+        ChatWindow.Messages.Add(vm);
 
-        // FEA-03: track unverified state — set true when any plaintext message exists
+        if (message.Kind == MessageKind.Image && message.MediaId is { } mid)
+        {
+            _ = LoadMessageInlineImageAsync(vm, mid);
+        }
+
         if (message.ProtocolVersion == ProtocolVersion.Plaintext)
         {
             await Dispatcher.UIThread.InvokeAsync(() => ChatWindow.IsUnverified = true);
+        }
+    }
+
+    private async Task LoadMessageInlineImageAsync(MessageItemViewModel vm, Guid mediaId)
+    {
+        try
+        {
+            var bytes = await _apiClient.DownloadMediaAsync(mediaId);
+            await using var ms = new MemoryStream(bytes);
+            var bmp = await Task.Run(() => new Bitmap(ms));
+            await Dispatcher.UIThread.InvokeAsync(() => vm.InlineImage = bmp);
+        }
+        catch
+        {
         }
     }
 
@@ -1391,13 +1579,33 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             if (chatItem is null)
                 return;
 
-            try
+            if (message.SenderId == _sessionService.CurrentUserId &&
+                _sentPlaintextByMessageId.TryGetValue(message.Id, out var ownSubtitle))
             {
-                chatItem.Subtitle = await _encryptionService.DecryptAsync(message);
+                if (message.Kind == MessageKind.Image)
+                {
+                    var t = ownSubtitle.Trim('\u200b', ' ', '\t', '\r', '\n');
+                    chatItem.Subtitle = string.IsNullOrEmpty(t) ? "📷" : t;
+                }
+                else
+                {
+                    chatItem.Subtitle = ownSubtitle;
+                }
             }
-            catch
+            else
             {
-                chatItem.Subtitle = "[Unable to decrypt]";
+                try
+                {
+                    var decrypted = await _encryptionService.DecryptAsync(message);
+                    if (message.Kind == MessageKind.Image && string.IsNullOrWhiteSpace(decrypted.Trim('\u200b', ' ', '\t', '\r', '\n')))
+                        chatItem.Subtitle = "📷";
+                    else
+                        chatItem.Subtitle = decrypted;
+                }
+                catch
+                {
+                    chatItem.Subtitle = "[Unable to decrypt]";
+                }
             }
 
             chatItem.LastActivity = TimestampFormatter.FormatTimestamp(message.CreatedAtUtc);
@@ -1424,16 +1632,29 @@ public sealed partial class MainWindowViewModel : ViewModelBase
     private string DeletedChatsKey() => $"deleted-chats-{_sessionService.CurrentUserId:N}";
     private string ClearedChatsKey() => $"cleared-chats-{_sessionService.CurrentUserId:N}";
 
-    private async Task DeleteChatAsync(Guid chatId)
+    private Task DeleteChatAsync(Guid chatId)
+    {
+        var chatTitle = ChatList.Chats.FirstOrDefault(c => c.Id == chatId)?.Title ?? "this chat";
+        PendingDeleteChatTitle = chatTitle;
+        _pendingDeleteChatId = chatId;
+        IsConfirmingDeleteChat = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task ExecuteDeleteChatAsync(Guid chatId)
     {
         try
         {
+            if (_sessionService.IsAuthenticated)
+            {
+                await _apiClient.DeleteChatAsync(chatId);
+            }
             await _localMessageRepository.DeleteChatAsync(chatId);
         }
         catch (Exception ex)
         {
             StatusMessage = "failed to delete chat";
-            ShowDebugError("DeleteChatAsync", ex);
+            ShowDebugError("ExecuteDeleteChatAsync", ex);
             return;
         }
 
@@ -1451,7 +1672,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
             if (ChatList.SelectedChat?.Id == chatId)
             {
                 ChatList.SelectedChat = null;
-                // Setting SelectedChat = null triggers LoadSelectedChatAsync which clears ChatWindow.Messages
             }
 
             ChatList.Chats.Remove(item);
@@ -1476,7 +1696,6 @@ public sealed partial class MainWindowViewModel : ViewModelBase
         await _localCacheService.SaveAsync(ClearedChatsKey(),
             _clearedChats.ToDictionary(kv => kv.Key.ToString(), kv => kv.Value));
 
-        // Evict cache BEFORE UI update to prevent stale re-injection via AppendMessageAsync
         _messageCache.Remove(chatId);
         await _localCacheService.SaveAsync(GetMessageCacheKey(chatId), Array.Empty<MessageDto>());
 

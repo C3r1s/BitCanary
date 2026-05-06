@@ -1,14 +1,11 @@
+// Клиентское E2E: «ISessionManager» (сессии, ключи, ratchet).
 namespace Messenger.Client.Avalonia.Services.Crypto;
 
-/// <summary>
-/// Thread-safe, persistent Double Ratchet session lifecycle.
-/// Each session is guarded by a per-session SemaphoreSlim(1,1) and
-/// its ratchet state is persisted to SQLite WAL after every encrypt/decrypt.
-/// </summary>
 public interface ISessionManager
 {
     Task<RatchetState?> GetSessionAsync(string sessionId, CancellationToken ct = default);
     Task SaveSessionAsync(RatchetState state, CancellationToken ct = default);
+    Task ResetSessionAsync(string sessionId, CancellationToken ct = default);
 
     Task<(byte[] Ciphertext, byte[] RatchetPublic, int Pn, int N)> EncryptAsync(
         string sessionId, byte[] plaintext, byte[] associatedData, CancellationToken ct = default);

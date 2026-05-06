@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «JwtStartupGuardTests».
 using Messenger.Api.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,7 +21,6 @@ public sealed class JwtStartupGuardTests
     {
         var values = new Dictionary<string, string?>
         {
-            // Minimal values to prevent AddMessengerInfrastructure from crashing on missing config
             ["ConnectionStrings:Postgres"] =
                 "Host=localhost;Port=5432;Database=test;Username=postgres;Password=postgres",
             ["Jwt:Issuer"] = "TestIssuer",
@@ -70,10 +70,8 @@ public sealed class JwtStartupGuardTests
     {
         var services = new ServiceCollection();
         var env = CreateEnvironment("Development");
-        // Short key (< 32 chars) — guard is NOT active in Development; SymmetricSecurityKey requires non-empty bytes
         var config = BuildConfig(signingKey: "dev-short-key");
 
-        // Should not throw; AddMessengerApi returns services normally
         var exception = Record.Exception(() => services.AddMessengerApi(config, env));
         Assert.Null(exception);
     }
@@ -83,7 +81,6 @@ public sealed class JwtStartupGuardTests
     {
         var services = new ServiceCollection();
         var env = CreateEnvironment("Production");
-        // 42-char key — exceeds the 32-char minimum
         var config = BuildConfig(signingKey: "a-32-character-or-longer-signing-key-value");
 
         var exception = Record.Exception(() => services.AddMessengerApi(config, env));

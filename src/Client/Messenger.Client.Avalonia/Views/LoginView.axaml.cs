@@ -1,3 +1,4 @@
+// Код-behind «LoginView.axaml»: обработка UI и связь с ViewModel.
 using Avalonia.Controls;
 
 namespace Messenger.Client.Avalonia.Views;

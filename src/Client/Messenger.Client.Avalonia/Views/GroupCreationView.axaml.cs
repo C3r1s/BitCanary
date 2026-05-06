@@ -1,3 +1,4 @@
+// Код-behind «GroupCreationView.axaml»: обработка UI и связь с ViewModel.
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;

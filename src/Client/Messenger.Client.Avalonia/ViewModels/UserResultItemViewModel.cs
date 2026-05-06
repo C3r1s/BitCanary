@@ -1,3 +1,4 @@
+// Состояние и команды UI BitCanary для «UserResultItemViewModel».
 using Messenger.Shared.Contracts.Dtos;
 
 namespace Messenger.Client.Avalonia.ViewModels;

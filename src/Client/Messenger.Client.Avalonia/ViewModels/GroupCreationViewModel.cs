@@ -1,3 +1,4 @@
+// Состояние и команды UI BitCanary для «GroupCreationViewModel».
 using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -43,7 +44,6 @@ public sealed partial class GroupCreationViewModel : ViewModelBase
             SelectedMembers.Add(item);
             OnPropertyChanged(nameof(CanCreate));
             CreateGroupCommand.NotifyCanExecuteChanged();
-            // Clear search results and query after adding
             Dispatcher.UIThread.Post(() =>
             {
                 SearchResults.Clear();

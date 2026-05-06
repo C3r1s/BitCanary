@@ -1,13 +1,10 @@
+// Автотест BitCanary: проверка «SessionManagerTests».
 using Messenger.Client.Avalonia.Services.Crypto;
 using Microsoft.Data.Sqlite;
 using Xunit;
 
 namespace Messenger.Client.Tests;
 
-/// <summary>
-/// Unit tests for RatchetSessionRepository and SessionManager.
-/// Repository tests use an in-memory SQLite database with the schema applied manually.
-/// </summary>
 public class SessionManagerTests : IDisposable
 {
     private readonly SqliteConnection _db;
@@ -45,7 +42,6 @@ public class SessionManagerTests : IDisposable
         cmd.ExecuteNonQuery();
     }
 
-    // ── RatchetSessionRepository ──────────────────────────────────────────
 
     [Fact]
     public async Task SaveAndLoad_Session_RoundTrip()
@@ -86,7 +82,6 @@ public class SessionManagerTests : IDisposable
         Assert.NotNull(consumed);
         Assert.Equal(msgKey, consumed);
 
-        // Second consume returns null (deleted)
         var second = await _repo.TryConsumeSkippedKeyAsync(sessionId, ratchetPub, msgNumber);
         Assert.Null(second);
     }
@@ -97,18 +92,14 @@ public class SessionManagerTests : IDisposable
         var sessionId = "session-limit";
         var ratchetPub = new byte[] { 0x01, 0x02, 0x03 };
 
-        // Insert 5 keys
         for (int i = 0; i < 5; i++)
         {
             await _repo.SaveSkippedKeyAsync(sessionId, ratchetPub, i, new byte[] { (byte)i });
-            // Small delay to ensure distinct stored_at ordering
             await Task.Delay(2);
         }
 
-        // Enforce max 3
         await _repo.EnforceSkippedKeyLimitAsync(sessionId, 3);
 
-        // Count remaining
         using var cmd = _db.CreateCommand();
         cmd.CommandText = "SELECT COUNT(*) FROM skipped_message_keys WHERE session_id = $sid";
         cmd.Parameters.AddWithValue("$sid", sessionId);
@@ -116,7 +107,6 @@ public class SessionManagerTests : IDisposable
         Assert.Equal(3, count);
     }
 
-    // ── SessionManager ────────────────────────────────────────────────────
 
     [Fact]
     public async Task SessionManager_EncryptAsync_AcquiresSemaphoreAndPersistsState()
@@ -124,7 +114,6 @@ public class SessionManagerTests : IDisposable
         var svc = new DoubleRatchetService();
         var manager = new SessionManager(svc, _repo);
 
-        // Create a session first using real X25519 key pair for SPK
         var sharedSecret = new byte[32];
         System.Security.Cryptography.RandomNumberGenerator.Fill(sharedSecret);
 
@@ -138,18 +127,15 @@ public class SessionManagerTests : IDisposable
 
         await manager.CreateInitiatorSessionAsync("sess-1", sharedSecret, bobSpkPublic);
 
-        // Verify session was persisted
         var loaded = await _repo.LoadSessionAsync("sess-1");
         Assert.NotNull(loaded);
 
-        // Encrypt a message — state must be updated in repo
         var plaintext = System.Text.Encoding.UTF8.GetBytes("hello");
         var ad = System.Text.Encoding.UTF8.GetBytes("aad");
         var (ct, _, _, _) = await manager.EncryptAsync("sess-1", plaintext, ad);
 
         Assert.NotEmpty(ct);
 
-        // Session state should be persisted (message number incremented)
         var blobAfter = await _repo.LoadSessionAsync("sess-1");
         Assert.NotNull(blobAfter);
         var stateAfter = RatchetState.Deserialize(blobAfter!);
@@ -159,7 +145,6 @@ public class SessionManagerTests : IDisposable
     [Fact]
     public async Task SessionManager_FullRoundTrip_AliceToBob()
     {
-        // Create a second in-memory DB for Bob
         using var bobDb = new SqliteConnection("Data Source=:memory:");
         bobDb.Open();
         ApplySchema(bobDb);
@@ -172,7 +157,6 @@ public class SessionManagerTests : IDisposable
         var sharedSecret = new byte[32];
         System.Security.Cryptography.RandomNumberGenerator.Fill(sharedSecret);
 
-        // Generate Bob's SPK key pair
         var bobSpkKey = NSec.Cryptography.Key.Create(
             NSec.Cryptography.KeyAgreementAlgorithm.X25519,
             new NSec.Cryptography.KeyCreationParameters
@@ -182,13 +166,11 @@ public class SessionManagerTests : IDisposable
         var bobSpkPrivate = bobSpkKey.Export(NSec.Cryptography.KeyBlobFormat.RawPrivateKey);
         var bobSpkPublic = bobSpkKey.PublicKey.Export(NSec.Cryptography.KeyBlobFormat.RawPublicKey);
 
-        // Set up sessions
         await aliceManager.CreateInitiatorSessionAsync("chat-1", sharedSecret, bobSpkPublic);
         await bobManager.CreateResponderSessionAsync("chat-1", sharedSecret, bobSpkPrivate, bobSpkPublic);
 
         var ad = System.Text.Encoding.UTF8.GetBytes("ad");
 
-        // Alice sends to Bob
         var alicePlaintext = System.Text.Encoding.UTF8.GetBytes("Hello Bob!");
         var (ct, rpub, pn, n) = await aliceManager.EncryptAsync("chat-1", alicePlaintext, ad);
         var decrypted = await bobManager.DecryptAsync("chat-1", ct, rpub, pn, n, ad);

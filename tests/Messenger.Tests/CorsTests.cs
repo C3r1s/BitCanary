@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «CorsTests».
 using Messenger.Api.Extensions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -8,13 +9,6 @@ using Microsoft.Extensions.Hosting;
 
 namespace Messenger.Tests;
 
-/// <summary>
-/// Tests that CORS is configured with specific origins from config (WEB-02).
-///
-/// DESIGN: These tests build a minimal test host that mirrors the production
-/// CORS registration pattern in Program.cs. The tests validate the corrected
-/// behavior (WithOrigins from config) and will fail if AllowAnyOrigin() is used.
-/// </summary>
 [Trait("Category", "Integration")]
 public sealed class CorsTests : IAsyncLifetime
 {
@@ -47,14 +41,12 @@ public sealed class CorsTests : IAsyncLifetime
     {
         var config = BuildConfig(["http://localhost:5500"]);
 
-        // Mirror the production CORS registration: read from Cors:AllowedOrigins config key
         var hostBuilder = new HostBuilder()
             .ConfigureWebHost(webHost =>
             {
                 webHost.UseTestServer();
                 webHost.ConfigureServices((_, services) =>
                 {
-                    // Reproduce the corrected Program.cs pattern exactly
                     var allowedOrigins = config
                         .GetSection("Cors:AllowedOrigins")
                         .Get<string[]>() ?? [];
@@ -89,9 +81,6 @@ public sealed class CorsTests : IAsyncLifetime
         await Task.CompletedTask;
     }
 
-    /// <summary>
-    /// Cors:AllowedOrigins config key must exist and contain origin values (not hardcoded).
-    /// </summary>
     [Fact]
     public void Cors_ReadsAllowedOriginsFromConfiguration()
     {
@@ -103,9 +92,6 @@ public sealed class CorsTests : IAsyncLifetime
         Assert.Contains("http://localhost:5500", origins);
     }
 
-    /// <summary>
-    /// Response to request from configured origin must echo that specific origin, not wildcard.
-    /// </summary>
     [Fact]
     public async Task Cors_ReturnsSpecificOriginHeader_NotWildcard()
     {
@@ -121,16 +107,11 @@ public sealed class CorsTests : IAsyncLifetime
 
         var origin = response.Headers.GetValues("Access-Control-Allow-Origin").FirstOrDefault();
 
-        // Must NOT return wildcard — WEB-02 requires specific origin matching
         Assert.NotEqual("*", origin);
 
-        // Must echo the configured origin exactly
         Assert.Equal("http://localhost:5500", origin);
     }
 
-    /// <summary>
-    /// AllowAnyOrigin() must not be used — it is incompatible with AllowCredentials() (Phase 25).
-    /// </summary>
     [Fact]
     public async Task Cors_DoesNotAllowUnknownOrigins()
     {
@@ -140,7 +121,6 @@ public sealed class CorsTests : IAsyncLifetime
 
         var response = await _client.SendAsync(request);
 
-        // An unconfigured origin must NOT receive Access-Control-Allow-Origin: *
         if (response.Headers.Contains("Access-Control-Allow-Origin"))
         {
             var origin = response.Headers.GetValues("Access-Control-Allow-Origin").FirstOrDefault();

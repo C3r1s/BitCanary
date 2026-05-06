@@ -1,3 +1,4 @@
+// Состояние и команды UI BitCanary для «SettingsViewModel».
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -22,12 +23,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private bool _sendByEnter = true;
 
     [ObservableProperty]
-    private bool _useCompactMode;
-
-    [ObservableProperty]
     private bool _enableCustomEmoji = true;
 
-    // ── Notification section ──────────────────────────────────────────────────
 
     [ObservableProperty]
     private bool _showNotifications = true;
@@ -35,7 +32,6 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _showSenderName = true;
 
-    // ── Encryption section ────────────────────────────────────────────────────
 
     [ObservableProperty]
     private string _spkRotationDate = "Last rotated: Unknown";
@@ -46,16 +42,11 @@ public sealed partial class SettingsViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isRegenerating;
 
-    /// <summary>
-    /// True when the regeneration confirmation overlay is visible.
-    /// </summary>
     [ObservableProperty]
     private bool _isConfirmingRegenerate;
 
-    /// <summary>Relay from MainWindowViewModel so Settings can trigger safety number view.</summary>
     public IRelayCommand? ShowSafetyNumberCommand { get; set; }
 
-    /// <summary>Relay from MainWindowViewModel so Settings can trigger logout.</summary>
     public IRelayCommand? LogoutCommand { get; set; }
 
     public IAsyncRelayCommand RegenerateIdentityKeyCommand { get; }
@@ -64,17 +55,12 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     public IRelayCommand CancelRegenerateCommand { get; }
 
-    // ── Theme section ─────────────────────────────────────────────────────────
 
     public ObservableCollection<ThemeOption> ThemeOptions { get; } =
     [
-        new ThemeOption(ThemePreference.System, "System"),
-        new ThemeOption(ThemePreference.Light, "Light"),
-        new ThemeOption(ThemePreference.Dark, "Dark"),
         new ThemeOption(ThemePreference.Terminal, "Terminal (Hacker)")
     ];
 
-    // ── Terminal sub-scheme ───────────────────────────────────────────────────
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsTerminalThemeSelected))]
@@ -94,8 +80,8 @@ public sealed partial class SettingsViewModel : ViewModelBase
     private TerminalSchemeOption? _selectedTerminalScheme;
 
     private readonly Action<Messenger.Shared.Contracts.TerminalColorScheme>? _applyTerminalScheme;
+    private bool _suppressTerminalSchemePersistence;
 
-    // ─────────────────────────────────────────────────────────────────────────
 
     public SettingsViewModel(
         Func<ThemePreference, Task> changeThemeAsync,
@@ -122,16 +108,38 @@ public sealed partial class SettingsViewModel : ViewModelBase
 
     partial void OnSelectedTerminalSchemeChanged(TerminalSchemeOption? value)
     {
-        if (value is not null && IsTerminalThemeSelected)
+        if (value is null) return;
+
+        _applyTerminalScheme?.Invoke(value.Value);
+        if (_suppressTerminalSchemePersistence) return;
+
+        if (SelectedThemeOption?.Value != ThemePreference.Terminal)
         {
-            _applyTerminalScheme?.Invoke(value.Value);
+            _selectedThemeOption = ThemeOptions.FirstOrDefault(x => x.Value == ThemePreference.Terminal)
+                                   ?? ThemeOptions[0];
+            OnPropertyChanged(nameof(SelectedThemeOption));
+            OnPropertyChanged(nameof(IsTerminalThemeSelected));
         }
+        _ = _changeThemeAsync(ThemePreference.Terminal);
     }
 
-    /// <summary>
-    /// Refreshes the SPK rotation date displayed in the Encryption section.
-    /// Call this after key bundle is loaded.
-    /// </summary>
+    public void SelectTerminalSchemeFromSettings(TerminalColorScheme scheme)
+    {
+        var option = TerminalSchemeOptions.FirstOrDefault(x => x.Value == scheme)
+                     ?? TerminalSchemeOptions[0];
+        _suppressTerminalSchemePersistence = true;
+        try
+        {
+            SelectedTerminalScheme = option;
+        }
+        finally
+        {
+            _suppressTerminalSchemePersistence = false;
+        }
+
+        _applyTerminalScheme?.Invoke(option.Value);
+    }
+
     public void RefreshSpkRotationDate()
     {
         if (_keyPublicationService is null)

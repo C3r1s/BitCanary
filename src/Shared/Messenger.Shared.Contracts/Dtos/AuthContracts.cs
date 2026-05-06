@@ -1,3 +1,4 @@
+// DTO передачи «AuthContracts» между API BitCanary и клиентами.
 namespace Messenger.Shared.Contracts.Dtos;
 
 public sealed record RegisterRequest(string UserName, string DisplayName, string Password, string PublicKey);

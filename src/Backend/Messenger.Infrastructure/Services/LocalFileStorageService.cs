@@ -1,3 +1,4 @@
+// Локальное файловое хранилище вложений на диске сервера.
 using Messenger.Application.Abstractions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
@@ -35,7 +36,6 @@ public sealed class LocalFileStorageService(
             ? _options.RootPath
             : Path.Combine(hostEnvironment.ContentRootPath, _options.RootPath);
 
-        // Reject path-traversal attempts
         var fullPath = Path.GetFullPath(Path.Combine(root, Path.GetFileName(blobPath)));
         if (!fullPath.StartsWith(Path.GetFullPath(root), StringComparison.OrdinalIgnoreCase))
         {

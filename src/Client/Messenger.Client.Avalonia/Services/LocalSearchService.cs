@@ -1,12 +1,8 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «LocalSearchService».
 using Microsoft.Data.Sqlite;
 
 namespace Messenger.Client.Avalonia.Services;
 
-/// <summary>
-/// FTS5-backed implementation of <see cref="ILocalSearchService"/>.
-/// All results are scoped to <see cref="IClientSessionService.CurrentUserId"/>
-/// via the <c>owner_user_id</c> column (schema V5).
-/// </summary>
 public sealed class LocalSearchService(
     SqliteConnection connection,
     IClientSessionService sessionService) : ILocalSearchService

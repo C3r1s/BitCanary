@@ -1,3 +1,4 @@
+// Конфигурация сущности EF Core «UserKeyBundleConfiguration»: индексы, связи и ограничения.
 using Messenger.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;

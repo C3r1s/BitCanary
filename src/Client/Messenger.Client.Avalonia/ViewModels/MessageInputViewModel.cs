@@ -1,14 +1,20 @@
+// Состояние и команды UI BitCanary для «MessageInputViewModel».
+using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Messenger.Client.Avalonia.Models;
+using Messenger.Client.Avalonia.Services;
 
 namespace Messenger.Client.Avalonia.ViewModels;
 
 public sealed partial class MessageInputViewModel : ViewModelBase
 {
-    private readonly Func<string, Task> _sendAsync;
+    private readonly Func<ChatSendPayload, Task> _sendAsync;
     private readonly Func<Guid?, bool, Task> _typingChangedAsync;
     private readonly Func<Guid?> _getCurrentChatId;
     private readonly Func<bool> _getIsBlockedForKeyVerification;
+
+    private IStorageFile? _pendingAttachment;
 
     [ObservableProperty]
     private string _text = string.Empty;
@@ -27,7 +33,7 @@ public sealed partial class MessageInputViewModel : ViewModelBase
     public IRelayCommand ClearAttachmentCommand { get; }
 
     public MessageInputViewModel(
-        Func<string, Task> sendAsync,
+        Func<ChatSendPayload, Task> sendAsync,
         Func<Guid?, bool, Task> typingChangedAsync,
         Func<Guid?> getCurrentChatId,
         Func<bool> getIsBlockedForKeyVerification)
@@ -43,15 +49,16 @@ public sealed partial class MessageInputViewModel : ViewModelBase
         });
         ClearAttachmentCommand = new RelayCommand(() =>
         {
+            _pendingAttachment = null;
             PendingAttachmentName = null;
             SendCommand.NotifyCanExecuteChanged();
         });
     }
 
-    /// <summary>Called from code-behind after the user picks a file.</summary>
-    public void AttachFile(string fileName)
+    public void AttachFile(IStorageFile file)
     {
-        PendingAttachmentName = fileName;
+        _pendingAttachment = file;
+        PendingAttachmentName = file.Name;
         SendCommand.NotifyCanExecuteChanged();
     }
 
@@ -61,26 +68,42 @@ public sealed partial class MessageInputViewModel : ViewModelBase
         _ = _typingChangedAsync(_getCurrentChatId(), !string.IsNullOrWhiteSpace(value));
     }
 
-    /// <summary>Notifies SendCommand that block state may have changed.</summary>
     public void NotifyBlockStateChanged()
     {
         SendCommand.NotifyCanExecuteChanged();
     }
 
     private bool CanSend() =>
-        (!string.IsNullOrWhiteSpace(Text) || PendingAttachmentName is not null)
+        (!string.IsNullOrWhiteSpace(Text) || _pendingAttachment is not null)
         && !IsSending
         && !_getIsBlockedForKeyVerification();
 
     private async Task SendAsync()
     {
-        var text = Text.Trim();
-        if (PendingAttachmentName is not null)
-            text = string.IsNullOrWhiteSpace(text)
-                ? $"[File: {PendingAttachmentName}]"
-                : $"{text}\n[File: {PendingAttachmentName}]";
+        var trimmed = Text.Trim();
+        IStorageFile? imageFile = null;
+        string textForSend;
 
-        if (string.IsNullOrWhiteSpace(text))
+        if (_pendingAttachment is not null)
+        {
+            if (ImageSendFormats.IsImageFileName(_pendingAttachment.Name))
+            {
+                imageFile = _pendingAttachment;
+                textForSend = trimmed;
+            }
+            else
+            {
+                textForSend = string.IsNullOrWhiteSpace(trimmed)
+                    ? $"[File: {_pendingAttachment.Name}]"
+                    : $"{trimmed}\n[File: {_pendingAttachment.Name}]";
+            }
+        }
+        else
+        {
+            textForSend = trimmed;
+        }
+
+        if (string.IsNullOrWhiteSpace(textForSend) && imageFile is null)
             return;
 
         IsSending = true;
@@ -88,8 +111,9 @@ public sealed partial class MessageInputViewModel : ViewModelBase
 
         try
         {
-            await _sendAsync(text);
+            await _sendAsync(new ChatSendPayload(textForSend, imageFile));
             Text = string.Empty;
+            _pendingAttachment = null;
             PendingAttachmentName = null;
         }
         finally

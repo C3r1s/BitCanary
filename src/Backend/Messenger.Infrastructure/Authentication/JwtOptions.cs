@@ -1,3 +1,4 @@
+// Настройки JWT (issuer, audience, ключ подписи, время жизни).
 namespace Messenger.Infrastructure.Authentication;
 
 public sealed class JwtOptions

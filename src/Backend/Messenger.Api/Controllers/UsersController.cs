@@ -1,3 +1,4 @@
+// Профиль пользователя, настройки UI и поиск людей в BitCanary.
 using Messenger.Application.Abstractions;
 using Messenger.Shared.Contracts.Dtos;
 using Microsoft.AspNetCore.Authorization;

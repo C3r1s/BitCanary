@@ -1,3 +1,4 @@
+<!-- Разметка экрана BitCanary «SafetyNumberView»: поля, списки и панели (Avalonia). -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
@@ -5,27 +6,28 @@
              x:DataType="vm:SafetyNumberViewModel">
   <StackPanel Spacing="16">
 
-    <!-- Title + close -->
+    
     <Grid ColumnDefinitions="*,Auto">
       <TextBlock Text="SAFETY NUMBER"
-                 FontSize="13" FontWeight="Bold"
+                 FontSize="14" FontWeight="Bold"
                  Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                  VerticalAlignment="Center" />
       <Button Grid.Column="1"
               Content="[X]"
               Command="{Binding CloseCommand}"
               Background="Transparent" Padding="8,4"
+              FontSize="14"
               VerticalAlignment="Center" />
     </Grid>
 
-    <!-- Peer name -->
+    
     <TextBlock Text="{Binding PeerDisplayName}"
-               FontSize="13" Foreground="#888888" />
+               FontSize="14" Foreground="#888888" />
 
-    <!-- Loading -->
+    
     <ProgressBar IsIndeterminate="True" Width="200" IsVisible="{Binding IsLoading}" />
 
-    <!-- Safety number digits -->
+    
     <TextBlock Text="{Binding SafetyNumber}"
                FontSize="18" FontWeight="Bold"
                FontFamily="Cascadia Mono, Consolas, Courier New"
@@ -34,33 +36,89 @@
                TextAlignment="Center"
                IsVisible="{Binding !IsLoading}" />
 
-    <!-- Instructions -->
+    
     <Border BorderBrush="#1E1E1E" BorderThickness="0,1,0,0" Padding="0,12,0,0">
-      <TextBlock FontSize="12" TextWrapping="Wrap" Foreground="#888888">
+      <TextBlock FontSize="14" TextWrapping="Wrap" Foreground="#888888">
         <Run Text="compare these numbers with " />
         <Run Text="{Binding PeerDisplayName}" FontWeight="Bold" Foreground="#C8C8C8" />
         <Run Text=" over a call or in person. if they match, this conversation is secure." />
       </TextBlock>
     </Border>
 
-    <!-- Verified timestamp -->
-    <StackPanel IsVisible="{Binding IsVerified}">
-      <TextBlock Text="{Binding VerifiedOnText}"
-                 Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
-                 FontSize="12" />
-    </StackPanel>
+    
+    <Border Padding="8,6"
+            BorderBrush="{Binding VerificationStatusColor}"
+            BorderThickness="1">
+      <TextBlock Text="{Binding VerificationStatusText}"
+                 Foreground="{Binding VerificationStatusColor}"
+                 FontSize="14"
+                 FontWeight="Bold" />
+    </Border>
 
-    <!-- Verify button -->
-    <Button Content="{Binding VerifyButtonText}"
+    <Button Content="[ MARK VERIFIED ]"
+            Command="{Binding MarkVerifiedCommand}"
+            IsVisible="{Binding !IsVerified}"
+            IsEnabled="{Binding CanMarkVerified}"
             HorizontalAlignment="Stretch"
             HorizontalContentAlignment="Center"
             Background="#003D2A"
             Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
             BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
             BorderThickness="1"
-            FontSize="13"
-            Command="{Binding MarkAsVerifiedCommand}"
-            IsEnabled="{Binding !IsVerified}" />
+            FontSize="14" />
+
+    
+    <StackPanel IsVisible="{Binding IsVerified}">
+      <TextBlock Text="{Binding VerifiedOnText}"
+                 Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                 FontSize="14" />
+    </StackPanel>
+
+    <Button Content="[ REGENERATE CHAT SAFETY ]"
+            Command="{Binding RegenerateSafetyNumberCommand}"
+            IsEnabled="{Binding CanRegenerate}"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Center"
+            Background="#1A1A1A"
+            Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+            BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
+            BorderThickness="1"
+            FontSize="14" />
+
+    <TextBlock Text="{Binding RegenerateStatusText}"
+               IsVisible="{Binding RegenerateStatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+               Foreground="#888888"
+               FontSize="14"
+               TextWrapping="Wrap" />
+
+    
+    <StackPanel Spacing="8">
+      <Button Content="[ DEBUG: Peer Safety Number ]"
+              Command="{Binding TogglePeerDebugSafetyNumberCommand}"
+              HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Center"
+              Background="#1A1A1A"
+              Foreground="#D9A020"
+              BorderBrush="#D9A020"
+              BorderThickness="1"
+              FontSize="14" />
+      <Border IsVisible="{Binding ShowPeerDebugSafetyNumber}"
+              BorderBrush="#D9A020"
+              BorderThickness="1"
+              Padding="8,6">
+        <StackPanel Spacing="4">
+          <TextBlock Text="Peer Safety Number (DEBUG)"
+                     Foreground="#D9A020"
+                     FontSize="14"
+                     FontWeight="Bold" />
+          <TextBlock Text="{Binding PeerDebugSafetyNumber}"
+                     FontSize="14"
+                     FontFamily="Cascadia Mono, Consolas, Courier New"
+                     Foreground="#D9A020"
+                     TextWrapping="Wrap" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
 
   </StackPanel>
 </UserControl>

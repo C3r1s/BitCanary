@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «GroupCreationViewModelTests».
 using Messenger.Client.Avalonia.ViewModels;
 using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
@@ -6,9 +7,6 @@ using Xunit;
 
 namespace Messenger.Client.Tests.GroupCreation;
 
-/// <summary>
-/// Unit tests for GroupCreationViewModel and the fourth mutual-exclusion mode on ChatListViewModel.
-/// </summary>
 public sealed class GroupCreationViewModelTests
 {
     private static GroupCreationViewModel CreateVm(
@@ -25,14 +23,10 @@ public sealed class GroupCreationViewModelTests
     private static UserResultItemViewModel MakeMember(string userName = "alice", string displayName = "Alice") =>
         new UserResultItemViewModel(new UserProfileDto(Guid.NewGuid(), userName, displayName, null, null, null, "pk"));
 
-    // -------------------------------------------------------------------------
-    // CanCreate tests
-    // -------------------------------------------------------------------------
 
     [Fact]
     public void CanCreate_FalseWithEmptyName()
     {
-        // GroupName="" and SelectedMembers has 1 entry → CanCreate is false
         var vm = CreateVm();
         vm.GroupName = string.Empty;
         vm.AddMemberCommand.Execute(MakeMember());
@@ -43,7 +37,6 @@ public sealed class GroupCreationViewModelTests
     [Fact]
     public void CanCreate_FalseWithNoMembers()
     {
-        // GroupName="My Group" and SelectedMembers is empty → CanCreate is false
         var vm = CreateVm();
         vm.GroupName = "My Group";
 
@@ -53,7 +46,6 @@ public sealed class GroupCreationViewModelTests
     [Fact]
     public void CanCreate_TrueWithNameAndMembers()
     {
-        // GroupName="My Group" and SelectedMembers has 1 entry → CanCreate is true
         var vm = CreateVm();
         vm.GroupName = "My Group";
         vm.AddMemberCommand.Execute(MakeMember());
@@ -61,14 +53,10 @@ public sealed class GroupCreationViewModelTests
         Assert.True(vm.CanCreate);
     }
 
-    // -------------------------------------------------------------------------
-    // Member management tests
-    // -------------------------------------------------------------------------
 
     [Fact]
     public void AddMember_AppearsInSelectedMembers()
     {
-        // AddMemberCommand with a UserResultItemViewModel → item in SelectedMembers
         var vm = CreateVm();
         var member = MakeMember();
 
@@ -80,7 +68,6 @@ public sealed class GroupCreationViewModelTests
     [Fact]
     public void AddMember_Duplicate_NotAddedTwice()
     {
-        // AddMemberCommand same UserId twice → SelectedMembers.Count == 1
         var vm = CreateVm();
         var member = MakeMember();
 
@@ -93,7 +80,6 @@ public sealed class GroupCreationViewModelTests
     [Fact]
     public void RemoveMember_RemovedFromSelectedMembers()
     {
-        // AddMemberCommand then RemoveMemberCommand → SelectedMembers.Count == 0
         var vm = CreateVm();
         var member = MakeMember();
 
@@ -104,14 +90,10 @@ public sealed class GroupCreationViewModelTests
         Assert.Empty(vm.SelectedMembers);
     }
 
-    // -------------------------------------------------------------------------
-    // ChatListViewModel mutual-exclusion tests
-    // -------------------------------------------------------------------------
 
     [Fact]
     public void IsInNormalMode_FalseWhenGroupCreationActive()
     {
-        // set IsGroupCreationMode=true → IsInNormalMode is false
         var vm = new ChatListViewModel(() => Task.CompletedTask);
 
         vm.IsGroupCreationMode = true;
@@ -122,7 +104,6 @@ public sealed class GroupCreationViewModelTests
     [Fact]
     public void ToggleGroupCreationCommand_MutualExclusion_ClosesUserSearch()
     {
-        // IsUserSearchMode=true, execute ToggleGroupCreationCommand → IsUserSearchMode=false, IsGroupCreationMode=true
         var vm = new ChatListViewModel(() => Task.CompletedTask);
         vm.IsUserSearchMode = true;
 
@@ -135,7 +116,6 @@ public sealed class GroupCreationViewModelTests
     [Fact]
     public void ToggleGroupCreationCommand_MutualExclusion_ClosesSearch()
     {
-        // IsSearchMode=true, execute ToggleGroupCreationCommand → IsSearchMode=false, IsGroupCreationMode=true
         var vm = new ChatListViewModel(() => Task.CompletedTask);
         vm.IsSearchMode = true;
 
@@ -148,7 +128,6 @@ public sealed class GroupCreationViewModelTests
     [Fact]
     public void ToggleGroupCreationCommand_Toggle_ClosesWhenAlreadyOpen()
     {
-        // IsGroupCreationMode=true, execute ToggleGroupCreationCommand → IsGroupCreationMode=false
         var vm = new ChatListViewModel(() => Task.CompletedTask);
         vm.IsGroupCreationMode = true;
 

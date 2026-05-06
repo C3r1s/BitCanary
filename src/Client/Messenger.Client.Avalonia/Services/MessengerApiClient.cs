@@ -1,3 +1,4 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «MessengerApiClient».
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -6,21 +7,13 @@ using Messenger.Shared.Contracts.Dtos;
 
 namespace Messenger.Client.Avalonia.Services;
 
-/// <summary>
-/// HTTP client wrapper for the Messenger REST API.
-/// Uses a per-request Authorization header so that the token is always
-/// up-to-date even after a mid-session login (token is read from
-/// IClientSessionService on every call).
-/// </summary>
 public sealed class MessengerApiClient(IClientSessionService sessionService) : IMessengerApiClient
 {
-    // One HttpClient for the lifetime of the app — BaseAddress is stable.
     private readonly HttpClient _http = new()
     {
         BaseAddress = new Uri($"{sessionService.ApiBaseUrl.TrimEnd('/')}/")
     };
 
-    // ── Auth ────────────────────────────────────────────────────────────
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
     {
@@ -36,7 +29,6 @@ public sealed class MessengerApiClient(IClientSessionService sessionService) : I
         return (await response.Content.ReadFromJsonAsync<AuthResponse>(cancellationToken))!;
     }
 
-    // ── Chats & messages ────────────────────────────────────────────────
 
     public async Task<IReadOnlyCollection<ChatSummaryDto>> GetChatsAsync(CancellationToken cancellationToken = default)
     {
@@ -67,7 +59,13 @@ public sealed class MessengerApiClient(IClientSessionService sessionService) : I
         return (await response.Content.ReadFromJsonAsync<MessageDto>(cancellationToken))!;
     }
 
-    // ── User settings ───────────────────────────────────────────────────
+    public async Task DeleteChatAsync(Guid chatId, CancellationToken cancellationToken = default)
+    {
+        using var req = Authorized(HttpMethod.Delete, $"api/chats/{chatId}");
+        var response = await _http.SendAsync(req, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+    }
+
 
     public async Task<UserSettingsDto> GetSettingsAsync(CancellationToken cancellationToken = default)
     {
@@ -89,7 +87,6 @@ public sealed class MessengerApiClient(IClientSessionService sessionService) : I
         return (await response.Content.ReadFromJsonAsync<UserSettingsDto>(cancellationToken))!;
     }
 
-    // ── Media ───────────────────────────────────────────────────────────
 
     public async Task<MediaUploadResponse> UploadMediaAsync(
         string fileName,
@@ -110,7 +107,14 @@ public sealed class MessengerApiClient(IClientSessionService sessionService) : I
         return (await response.Content.ReadFromJsonAsync<MediaUploadResponse>(cancellationToken))!;
     }
 
-    // ── Key bundles ─────────────────────────────────────────────────────
+    public async Task<byte[]> DownloadMediaAsync(Guid mediaId, CancellationToken cancellationToken = default)
+    {
+        using var req = Authorized(HttpMethod.Get, $"api/media/{mediaId}");
+        var response = await _http.SendAsync(req, cancellationToken);
+        await EnsureSuccessAsync(response, cancellationToken);
+        return await response.Content.ReadAsByteArrayAsync(cancellationToken);
+    }
+
 
     public async Task<KeyBundleDto?> GetKeyBundleAsync(Guid userId, CancellationToken cancellationToken = default)
     {
@@ -143,7 +147,6 @@ public sealed class MessengerApiClient(IClientSessionService sessionService) : I
         return (await response.Content.ReadFromJsonAsync<OtpkReplenishResponse>(cancellationToken))!;
     }
 
-    // ── User search & chat creation ─────────────────────────────────────
 
     public async Task<IReadOnlyCollection<UserProfileDto>> SearchUsersAsync(
         string query, CancellationToken cancellationToken = default)
@@ -166,7 +169,6 @@ public sealed class MessengerApiClient(IClientSessionService sessionService) : I
         return (await response.Content.ReadFromJsonAsync<ChatSummaryDto>(cancellationToken))!;
     }
 
-    // ── Group member management ─────────────────────────────────────────
 
     public async Task<ChatSummaryDto> AddMemberAsync(Guid chatId, Guid userId, CancellationToken ct = default)
     {
@@ -201,13 +203,7 @@ public sealed class MessengerApiClient(IClientSessionService sessionService) : I
         return (await response.Content.ReadFromJsonAsync<ChatSummaryDto>(ct))!;
     }
 
-    // ── Helpers ─────────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Builds a request with the current bearer token attached.
-    /// Reading the token from sessionService on every call ensures it is
-    /// always fresh (e.g. after a mid-session re-login).
-    /// </summary>
     private HttpRequestMessage Authorized(HttpMethod method, string uri)
     {
         var msg = new HttpRequestMessage(method, uri);

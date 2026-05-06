@@ -1,3 +1,4 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «DpapiKeyStore».
 using Microsoft.AspNetCore.DataProtection;
 
 namespace Messenger.Client.Avalonia.Services;

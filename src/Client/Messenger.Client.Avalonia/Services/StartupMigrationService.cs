@@ -1,13 +1,9 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «StartupMigrationService».
 using Messenger.Shared.Contracts.Dtos;
 using System.Security.Cryptography;
 
 namespace Messenger.Client.Avalonia.Services;
 
-/// <summary>
-/// Runs once on startup. Migrates any plaintext encryption-keyring.json entries to
-/// DPAPI-protected blobs and asserts no unprotected key material remains on disk.
-/// Also imports chats.json into the SQLite chats table (one-way, idempotent).
-/// </summary>
 public sealed class StartupMigrationService(
     IKeyStore keyStore,
     ILocalCacheService localCacheService,
@@ -47,7 +43,6 @@ public sealed class StartupMigrationService(
 
     private async Task MigrateChatsAsync(CancellationToken cancellationToken)
     {
-        // Idempotent: if chats.json is absent or empty, there is nothing to migrate.
         var chats = await localCacheService.LoadAsync<List<ChatSummaryDto>>("chats", cancellationToken);
         if (chats is null || chats.Count == 0) return;
 
@@ -59,11 +54,9 @@ public sealed class StartupMigrationService(
             {
                 await messageRepository.UpsertChatAsync(chat, cancellationToken);
             }
-            // Give the UI thread a chance to process events
             await Task.Delay(10, cancellationToken);
         }
 
-        // Overwrite chats.json with empty list so subsequent runs skip this step.
         await localCacheService.SaveAsync("chats", new List<ChatSummaryDto>(), cancellationToken);
     }
 
@@ -73,7 +66,6 @@ public sealed class StartupMigrationService(
 
         foreach (var file in Directory.EnumerateFiles(LocalAppData, "encryption-keyring*.json"))
         {
-            // Read first 2 bytes to detect JSON object (plaintext)
             using var fs = File.OpenRead(file);
             var header = new byte[2];
             if (fs.Read(header, 0, 2) == 2 && header[0] == (byte)'{')

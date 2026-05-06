@@ -1,3 +1,4 @@
+// Абстракция слоя Application BitCanary: «IKeyBundleService».
 using Messenger.Shared.Contracts.Dtos;
 
 namespace Messenger.Application.Abstractions;

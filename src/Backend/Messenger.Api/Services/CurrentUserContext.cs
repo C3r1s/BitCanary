@@ -1,3 +1,4 @@
+// Доступ к Claims текущего пользователя в запросе API BitCanary.
 using System.Security.Claims;
 using Messenger.Application.Abstractions;
 

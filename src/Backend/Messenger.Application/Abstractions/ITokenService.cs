@@ -1,3 +1,4 @@
+// Абстракция слоя Application BitCanary: «ITokenService».
 using Messenger.Domain.Entities;
 
 namespace Messenger.Application.Abstractions;

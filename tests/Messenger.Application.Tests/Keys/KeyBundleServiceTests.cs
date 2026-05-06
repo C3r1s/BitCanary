@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «KeyBundleServiceTests».
 using System.Net;
 using Messenger.Application.Abstractions;
 using Messenger.Application.Common;
@@ -6,6 +7,7 @@ using Messenger.Domain.Entities;
 using Messenger.Infrastructure.Persistence;
 using Messenger.Shared.Contracts.Dtos;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
 using NSubstitute;
 
 namespace Messenger.Application.Tests.Keys;
@@ -24,7 +26,7 @@ public sealed class KeyBundleServiceTests
     }
 
     private static KeyBundleService CreateService(AppDbContext db, ISpkValidator validator, IRealtimeNotifier notifier)
-        => new(db, validator, notifier);
+        => new(db, validator, notifier, NullLogger<KeyBundleService>.Instance);
 
     private static UserKeyBundle SeedBundle(AppDbContext db, Guid userId)
     {
@@ -157,7 +159,6 @@ public sealed class KeyBundleServiceTests
         var svc = CreateService(db, validator, notifier);
         var userId = Guid.NewGuid();
 
-        // Seed an older bundle
         var older = new UserKeyBundle
         {
             UserId = userId,
@@ -169,7 +170,6 @@ public sealed class KeyBundleServiceTests
         };
         db.UserKeyBundles.Add(older);
 
-        // Seed a newer bundle (same userId, different DeviceId)
         var newer = new UserKeyBundle
         {
             UserId = userId,
@@ -203,7 +203,6 @@ public sealed class KeyBundleServiceTests
         var count = await db.OneTimePreKeys.CountAsync(x => x.UserId == userId);
         Assert.Equal(5, count);
 
-        // Verify assigned IDs are returned
         Assert.Equal(5, result.AssignedIds.Length);
         Assert.All(result.AssignedIds, id => Assert.NotEqual(Guid.Empty, id));
         Assert.Equal(result.AssignedIds.Length, result.AssignedIds.Distinct().Count());

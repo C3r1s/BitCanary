@@ -1,3 +1,4 @@
+// Состояние и команды UI BitCanary для «LoginViewModel».
 using System.Net;
 using System.Security.Cryptography;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -12,7 +13,6 @@ public sealed partial class LoginViewModel : ViewModelBase
     private readonly IMessengerApiClient _api;
     private readonly IClientSessionService _session;
 
-    // ── Bindable state ───────────────────────────────────────────────────
 
     [ObservableProperty]
     private string _userName = string.Empty;
@@ -23,7 +23,6 @@ public sealed partial class LoginViewModel : ViewModelBase
     [ObservableProperty]
     private string _displayName = string.Empty;
 
-    /// <summary>True → registration form; False → sign-in form.</summary>
     [ObservableProperty]
     private bool _isRegistering;
 
@@ -33,17 +32,13 @@ public sealed partial class LoginViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isBusy;
 
-    // ── Commands ─────────────────────────────────────────────────────────
 
     public IAsyncRelayCommand SubmitCommand { get; }
     public IRelayCommand ToggleModeCommand { get; }
 
-    // ── Events ───────────────────────────────────────────────────────────
 
-    /// <summary>Raised after a successful login or registration.</summary>
     public event Func<AuthResponse, Task>? LoginSucceeded;
 
-    // ── Constructor ───────────────────────────────────────────────────────
 
     public LoginViewModel(IMessengerApiClient api, IClientSessionService session)
     {
@@ -54,7 +49,6 @@ public sealed partial class LoginViewModel : ViewModelBase
         ToggleModeCommand = new RelayCommand(ToggleMode);
     }
 
-    // ── Handlers ─────────────────────────────────────────────────────────
 
     partial void OnUserNameChanged(string value)    => SubmitCommand.NotifyCanExecuteChanged();
     partial void OnPasswordChanged(string value)    => SubmitCommand.NotifyCanExecuteChanged();
@@ -87,7 +81,6 @@ public sealed partial class LoginViewModel : ViewModelBase
 
             if (IsRegistering)
             {
-                // Generate an ECDH P-256 public key for E2E encryption on the server's record
                 var publicKey = GeneratePublicKey();
 
                 auth = await _api.RegisterAsync(
@@ -131,14 +124,7 @@ public sealed partial class LoginViewModel : ViewModelBase
         }
     }
 
-    // ── Crypto helper ─────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Generates a fresh ECDH P-256 key pair and returns the DER-encoded
-    /// SubjectPublicKeyInfo as a base-64 string.  The private key NEVER
-    /// leaves this method (it is generated fresh; the real private key for
-    /// E2E should be managed by the LocalEnvelopeEncryptionService).
-    /// </summary>
     private static string GeneratePublicKey()
     {
         using var ecdh = ECDiffieHellman.Create(ECCurve.NamedCurves.nistP256);

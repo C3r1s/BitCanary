@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «SqliteSchemaTests».
 using Messenger.Client.Avalonia.Services;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
@@ -88,9 +89,7 @@ public sealed class SqliteSchemaTests
 
         var bytes = await File.ReadAllBytesAsync(keyFile);
         Assert.True(bytes.Length > 0, "db-key.bin should not be empty");
-        // Must not be raw UTF-8/JSON (starts with '{')
         Assert.NotEqual(0x7B, bytes[0]);
-        // Must not be gzip (starts with 0x1F 0x8B)
         if (bytes.Length > 1)
         {
             Assert.False(bytes[0] == 0x1F && bytes[1] == 0x8B, "db-key.bin should not be gzip-encoded");

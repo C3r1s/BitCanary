@@ -1,3 +1,4 @@
+// Модель UI/отправки BitCanary: «ThemeOption».
 using Messenger.Shared.Contracts;
 
 namespace Messenger.Client.Avalonia.Models;

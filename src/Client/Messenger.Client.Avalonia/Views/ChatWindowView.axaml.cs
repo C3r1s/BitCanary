@@ -1,4 +1,6 @@
+// Код-behind «ChatWindowView.axaml»: обработка UI и связь с ViewModel.
 using System.Collections.Specialized;
+using System.ComponentModel;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -11,6 +13,8 @@ public partial class ChatWindowView : UserControl
 {
     private ScrollViewer? _scrollViewer;
     private TextBox? _findQueryBox;
+    private ChatWindowViewModel? _boundViewModel;
+    private bool _stickToBottom = true;
 
     public ChatWindowView()
     {
@@ -23,14 +27,37 @@ public partial class ChatWindowView : UserControl
         base.OnLoaded(e);
         _scrollViewer = this.FindControl<ScrollViewer>("MessagesScroll");
         _findQueryBox = this.FindControl<TextBox>("FindQueryBox");
+        if (_scrollViewer is not null)
+        {
+            _scrollViewer.ScrollChanged += OnScrollChanged;
+        }
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
+        if (_boundViewModel is not null)
+        {
+            _boundViewModel.Messages.CollectionChanged -= OnMessagesChanged;
+            _boundViewModel.PropertyChanged -= OnViewModelPropertyChanged;
+            foreach (var message in _boundViewModel.Messages)
+            {
+                message.PropertyChanged -= OnMessagePropertyChanged;
+            }
+        }
+
         if (DataContext is ChatWindowViewModel vm)
         {
+            _boundViewModel = vm;
             vm.Messages.CollectionChanged += OnMessagesChanged;
             vm.PropertyChanged += OnViewModelPropertyChanged;
+            foreach (var message in vm.Messages)
+            {
+                message.PropertyChanged += OnMessagePropertyChanged;
+            }
+        }
+        else
+        {
+            _boundViewModel = null;
         }
     }
 
@@ -39,18 +66,54 @@ public partial class ChatWindowView : UserControl
         if (e.PropertyName == nameof(ChatWindowViewModel.IsFindBarVisible) &&
             DataContext is ChatWindowViewModel vm && vm.IsFindBarVisible)
         {
-            // Auto-focus the find query box when the find-bar opens
             Dispatcher.UIThread.Post(() => _findQueryBox?.Focus(), DispatcherPriority.Background);
         }
     }
 
     private void OnMessagesChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
-        if (e.Action == NotifyCollectionChangedAction.Add)
+        if (e.OldItems is not null)
+        {
+            foreach (var item in e.OldItems.OfType<MessageItemViewModel>())
+            {
+                item.PropertyChanged -= OnMessagePropertyChanged;
+            }
+        }
+
+        if (e.NewItems is not null)
+        {
+            foreach (var item in e.NewItems.OfType<MessageItemViewModel>())
+            {
+                item.PropertyChanged += OnMessagePropertyChanged;
+            }
+        }
+
+        if (_stickToBottom &&
+            (e.Action == NotifyCollectionChangedAction.Add || e.Action == NotifyCollectionChangedAction.Reset))
         {
             Dispatcher.UIThread.Post(() => _scrollViewer?.ScrollToEnd(), DispatcherPriority.Background);
         }
     }
 
-}
+    private void OnMessagePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_stickToBottom && e.PropertyName == nameof(MessageItemViewModel.InlineImage))
+        {
+            Dispatcher.UIThread.Post(() => _scrollViewer?.ScrollToEnd(), DispatcherPriority.Background);
+        }
+    }
 
+    private void OnScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        _stickToBottom = IsNearBottom();
+    }
+
+    private bool IsNearBottom()
+    {
+        if (_scrollViewer is null) return true;
+
+        var remaining = _scrollViewer.Extent.Height - _scrollViewer.Viewport.Height - _scrollViewer.Offset.Y;
+        return remaining <= 24;
+    }
+
+}

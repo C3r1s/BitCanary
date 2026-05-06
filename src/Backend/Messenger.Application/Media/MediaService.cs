@@ -1,3 +1,4 @@
+// Сохранение загруженных файлов и выдача потоков для вложений в сообщениях.
 using System.Net;
 using Messenger.Application.Abstractions;
 using Messenger.Application.Common;
@@ -40,7 +41,6 @@ public sealed class MediaService(
 
     public async Task<MediaDownloadResult> DownloadAsync(Guid mediaId, CancellationToken cancellationToken)
     {
-        // Any authenticated user can download media referenced in their chats
         currentUser.RequireUserId();
 
         var asset = await dbContext.MediaAssets

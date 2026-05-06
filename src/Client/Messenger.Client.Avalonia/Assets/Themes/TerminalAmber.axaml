@@ -1,10 +1,11 @@
+<!-- Терминальная цветовая тема BitCanary «TerminalAmber». -->
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <!-- Sentinel key used by ThemeService to identify and remove terminal dictionaries -->
+  
   <x:Boolean x:Key="IsTerminalTheme">True</x:Boolean>
 
-  <!-- Amber terminal color scheme -->
-  <!-- Background / surface colors -->
+  
+  
   <Color x:Key="TerminalBackgroundColor">#0A0800</Color>
   <Color x:Key="TerminalSurfaceColor">#111009</Color>
   <Color x:Key="TerminalTextColor">#FFB300</Color>
@@ -17,10 +18,10 @@
   <SolidColorBrush x:Key="SystemControlForegroundBaseMediumBrush" Color="#FF8C00" />
   <SolidColorBrush x:Key="SystemControlForegroundBaseLowBrush" Color="#7A5500" />
 
-  <!-- Application background -->
+  
   <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="#0A0800" />
   <SolidColorBrush x:Key="SystemControlAcrylicWindowBrush" Color="#0A0800" />
 
-  <!-- Monospace font -->
-  <FontFamily x:Key="ContentControlThemeFontFamily">Fixedsys, Terminal, Lucida Console, Courier New, monospace</FontFamily>
+  
+  <FontFamily x:Key="ContentControlThemeFontFamily">Consolas, JetBrains Mono, Courier New, monospace</FontFamily>
 </ResourceDictionary>

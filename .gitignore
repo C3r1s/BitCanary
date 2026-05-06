@@ -481,3 +481,7 @@ $RECYCLE.BIN/
 # Vim temporary swap files
 *.swp
 .planning/
+.claude
+.idea
+.junie
+.planning

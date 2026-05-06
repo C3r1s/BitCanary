@@ -1,3 +1,4 @@
+// Состояние и команды UI BitCanary для «ChatWindowViewModel».
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -18,15 +19,8 @@ public sealed partial class ChatWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isSessionVerified;
 
-    /// <summary>True when the chat contains any plaintext messages (FEA-03).</summary>
     [ObservableProperty]
     private bool _isUnverified;
-
-    /// <summary>True when badge should show — either plaintext messages present OR safety number not verified.</summary>
-    public bool ShowUnverifiedBadge => IsUnverified || !IsSessionVerified;
-
-    partial void OnIsUnverifiedChanged(bool value) => OnPropertyChanged(nameof(ShowUnverifiedBadge));
-    partial void OnIsSessionVerifiedChanged(bool value) => OnPropertyChanged(nameof(ShowUnverifiedBadge));
 
     [ObservableProperty]
     private bool _isFindBarVisible;
@@ -40,22 +34,38 @@ public sealed partial class ChatWindowViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isGroupChat;
 
+    public bool IsDirectChat => !IsGroupChat;
+
+    public bool ShowUnverifiedBadge => IsDirectChat && !IsSessionVerified;
+
+    public bool ShowVerifiedBadge => IsDirectChat && IsSessionVerified;
+
+    partial void OnIsGroupChatChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsDirectChat));
+        OnPropertyChanged(nameof(ShowUnverifiedBadge));
+        OnPropertyChanged(nameof(ShowVerifiedBadge));
+    }
+
+    partial void OnIsUnverifiedChanged(bool value) => OnPropertyChanged(nameof(ShowUnverifiedBadge));
+    partial void OnIsSessionVerifiedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowUnverifiedBadge));
+        OnPropertyChanged(nameof(ShowVerifiedBadge));
+    }
+
     [ObservableProperty]
     private bool _isGroupInfoVisible;
 
     [ObservableProperty]
     private int _groupMemberCount;
 
-    /// <summary>Set by MainWindowViewModel to forward ShowSafetyNumberCommand into the header.</summary>
     public IRelayCommand? ShowSafetyNumberCommand { get; set; }
 
-    /// <summary>Set by MainWindowViewModel to wire group info operations.</summary>
     public GroupInfoViewModel? GroupInfo { get; set; }
 
-    /// <summary>Set by MainWindowViewModel to show the group info panel.</summary>
     public IRelayCommand? ShowGroupInfoCommand { get; set; }
 
-    /// <summary>Set by MainWindowViewModel to close the group info panel.</summary>
     public IRelayCommand? CloseGroupInfoCommand { get; set; }
 
     public IRelayCommand OpenFindBarCommand { get; }

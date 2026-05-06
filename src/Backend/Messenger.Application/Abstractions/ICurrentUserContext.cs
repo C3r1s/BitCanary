@@ -1,3 +1,4 @@
+// Абстракция слоя Application BitCanary: «ICurrentUserContext».
 namespace Messenger.Application.Abstractions;
 
 public interface ICurrentUserContext

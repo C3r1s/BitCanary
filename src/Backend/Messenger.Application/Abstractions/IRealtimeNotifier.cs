@@ -1,3 +1,4 @@
+// Абстракция слоя Application BitCanary: «IRealtimeNotifier».
 using Messenger.Shared.Contracts.Dtos;
 using Messenger.Shared.Contracts.Realtime;
 
@@ -12,4 +13,6 @@ public interface IRealtimeNotifier
     Task SendOtpkSupplyLowAsync(Guid userId, CancellationToken cancellationToken);
     Task SendMessageDeliveredAsync(Guid messageId, Guid senderId, CancellationToken cancellationToken);
     Task SendMessagesReadAsync(Guid chatId, Guid readByUserId, CancellationToken cancellationToken);
+
+    Task SendRemovedFromChatAsync(Guid chatId, Guid affectedUserId, CancellationToken cancellationToken);
 }

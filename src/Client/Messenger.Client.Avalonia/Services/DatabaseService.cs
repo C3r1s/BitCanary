@@ -1,13 +1,10 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «DatabaseService».
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Data.Sqlite;
 using System.Security.Cryptography;
 
 namespace Messenger.Client.Avalonia.Services;
 
-/// <summary>
-/// Opens and migrates the local SQLite database (WAL mode).
-/// Must be called once at startup before any repository access.
-/// </summary>
 public sealed class DatabaseService(IDataProtectionProvider dpProvider)
 {
     private static readonly string DefaultLocalAppData = Path.Combine(
@@ -20,11 +17,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
 
     public static string GetDbPath() => Path.Combine(DefaultLocalAppData, DbFileName);
 
-    /// <summary>
-    /// Opens (or creates) the SQLite database with WAL mode and applies the schema.
-    /// </summary>
-    /// <param name="localAppDataOverride">Override the local app data directory (for testing).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
     public async Task<SqliteConnection> OpenAsync(
         string? localAppDataOverride = null,
         CancellationToken cancellationToken = default)
@@ -36,7 +28,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
 
         var dbPath = Path.Combine(localAppData, DbFileName);
 
-        // Do NOT use Cache=Shared — incompatible with WAL mode
         var conn = new SqliteConnection($"Data Source={dbPath}");
         await conn.OpenAsync(cancellationToken);
 
@@ -57,24 +48,18 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
 
         if (File.Exists(keyFile))
         {
-            // Load and verify key is readable (detect corruption early)
             var blob = await File.ReadAllBytesAsync(keyFile, ct);
             var rawKey = protector.Unprotect(blob);  // throws CryptographicException if tampered
             CryptographicOperations.ZeroMemory(rawKey);
             return;
         }
 
-        // Generate and protect new DB key
         var key = RandomNumberGenerator.GetBytes(32);
         var protectedBlob = protector.Protect(key);
         CryptographicOperations.ZeroMemory(key);
         await File.WriteAllBytesAsync(keyFile, protectedBlob, ct);
     }
 
-    /// <summary>
-    /// Applies the full schema to the provided connection — exposed for unit/integration tests
-    /// that open an in-memory SQLite database directly without going through <see cref="OpenAsync"/>.
-    /// </summary>
     public static async Task ApplySchemaForTestAsync(SqliteConnection conn, CancellationToken ct = default)
     {
         await ApplySchemaAsync(conn, ct);
@@ -153,7 +138,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         var count = (long)(await checkCmd.ExecuteScalarAsync(ct))!;
         if (count > 0) return;
 
-        // SQLite requires separate commands per ALTER TABLE (not batched)
         await using var cmd1 = conn.CreateCommand();
         cmd1.CommandText = "ALTER TABLE ratchet_sessions ADD COLUMN verified INTEGER NOT NULL DEFAULT 0";
         await cmd1.ExecuteNonQueryAsync(ct);
@@ -178,8 +162,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         var count = (long)(await checkCmd.ExecuteScalarAsync(ct))!;
         if (count > 0) return;
 
-        // FTS5 virtual table for full-text search over decrypted message bodies.
-        // content_rowid='rowid' uses the implicit integer rowid (NOT the UUID id column) — Pitfall 1.
         await using var cmd1 = conn.CreateCommand();
         cmd1.CommandText = """
             CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
@@ -191,7 +173,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
             """;
         await cmd1.ExecuteNonQueryAsync(ct);
 
-        // AFTER INSERT trigger — index new plaintext rows
         await using var cmd2 = conn.CreateCommand();
         cmd2.CommandText = """
             CREATE TRIGGER IF NOT EXISTS messages_ai
@@ -202,7 +183,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
             """;
         await cmd2.ExecuteNonQueryAsync(ct);
 
-        // AFTER DELETE trigger — remove deleted rows from FTS index
         await using var cmd3 = conn.CreateCommand();
         cmd3.CommandText = """
             CREATE TRIGGER IF NOT EXISTS messages_ad
@@ -213,7 +193,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
             """;
         await cmd3.ExecuteNonQueryAsync(ct);
 
-        // AFTER UPDATE trigger — update FTS index when plaintext_body changes
         await using var cmd4 = conn.CreateCommand();
         cmd4.CommandText = """
             CREATE TRIGGER IF NOT EXISTS messages_au
@@ -226,7 +205,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
             """;
         await cmd4.ExecuteNonQueryAsync(ct);
 
-        // Backfill existing plaintext rows into FTS index
         await using var cmd5 = conn.CreateCommand();
         cmd5.CommandText = """
             INSERT INTO messages_fts(rowid, plaintext_body)
@@ -247,7 +225,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         var count = (long)(await checkCmd.ExecuteScalarAsync(ct))!;
         if (count > 0) return;
 
-        // Add send-status column to messages table (MessageStatus enum: Sending=0, Delivered=1, Read=2)
         await using var cmd1 = conn.CreateCommand();
         cmd1.CommandText = "ALTER TABLE messages ADD COLUMN status INTEGER NOT NULL DEFAULT 0";
         await cmd1.ExecuteNonQueryAsync(ct);
@@ -264,9 +241,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         var count = (long)(await checkCmd.ExecuteScalarAsync(ct))!;
         if (count > 0) return;
 
-        // Microsoft.Data.Sqlite 8.0+ enables FK enforcement by default.
-        // Disable it for the duration of this migration so we can DROP and rename tables
-        // that are referenced by FK declarations (e.g. messages.chat_id REFERENCES chats(id)).
         await using var fkOff = conn.CreateCommand();
         fkOff.CommandText = "PRAGMA foreign_keys = OFF";
         await fkOff.ExecuteNonQueryAsync(ct);
@@ -274,8 +248,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         try
         {
 
-        // Drop FTS triggers before recreating the content table (messages).
-        // Triggers reference the old table; they must be recreated after ALTER.
         await using var cmd1 = conn.CreateCommand();
         cmd1.CommandText = "DROP TRIGGER IF EXISTS messages_au";
         await cmd1.ExecuteNonQueryAsync(ct);
@@ -292,7 +264,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         cmd4.CommandText = "DROP TABLE IF EXISTS messages_fts";
         await cmd4.ExecuteNonQueryAsync(ct);
 
-        // Drop leftover temp tables in case a previous migration run was interrupted mid-flight.
         await using var cmdClean1 = conn.CreateCommand();
         cmdClean1.CommandText = "DROP TABLE IF EXISTS chats_new";
         await cmdClean1.ExecuteNonQueryAsync(ct);
@@ -301,8 +272,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         cmdClean2.CommandText = "DROP TABLE IF EXISTS messages_new";
         await cmdClean2.ExecuteNonQueryAsync(ct);
 
-        // Recreate chats with composite PK (id, owner_user_id).
-        // Existing rows are migrated with owner_user_id = '' (empty = unscoped legacy data).
         await using var cmd5 = conn.CreateCommand();
         cmd5.CommandText = """
             CREATE TABLE chats_new (
@@ -333,7 +302,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         cmd8.CommandText = "ALTER TABLE chats_new RENAME TO chats";
         await cmd8.ExecuteNonQueryAsync(ct);
 
-        // Recreate messages with composite PK (id, owner_user_id) and scoped client_message_id uniqueness.
         await using var cmd9 = conn.CreateCommand();
         cmd9.CommandText = """
             CREATE TABLE messages_new (
@@ -375,12 +343,10 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
         cmd12.CommandText = "ALTER TABLE messages_new RENAME TO messages";
         await cmd12.ExecuteNonQueryAsync(ct);
 
-        // Recreate index
         await using var cmd13 = conn.CreateCommand();
         cmd13.CommandText = "CREATE INDEX IF NOT EXISTS idx_messages_chat_sent ON messages(chat_id, sent_at)";
         await cmd13.ExecuteNonQueryAsync(ct);
 
-        // Recreate FTS5 virtual table (content_rowid='rowid' still valid — rowids are preserved)
         await using var cmd14 = conn.CreateCommand();
         cmd14.CommandText = """
             CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
@@ -424,7 +390,6 @@ public sealed class DatabaseService(IDataProtectionProvider dpProvider)
             """;
         await cmd17.ExecuteNonQueryAsync(ct);
 
-        // Backfill FTS index from migrated rows
         await using var cmd18 = conn.CreateCommand();
         cmd18.CommandText = """
             INSERT INTO messages_fts(rowid, plaintext_body)

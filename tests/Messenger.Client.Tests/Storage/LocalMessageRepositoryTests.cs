@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «LocalMessageRepositoryTests».
 using Messenger.Client.Avalonia.Services;
 using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
@@ -6,7 +7,6 @@ using Xunit;
 
 namespace Messenger.Client.Tests.Storage;
 
-// Minimal stub for IClientSessionService used in storage tests.
 file sealed class StubSessionService : IClientSessionService
 {
     public string ApiBaseUrl => string.Empty;
@@ -61,7 +61,6 @@ public sealed class LocalMessageRepositoryTests : IAsyncDisposable
         MetadataJson: null,
         CreatedAtUtc: DateTimeOffset.UtcNow);
 
-    // ── Test 1: Save and retrieve a message ──────────────────────────────
 
     [Fact]
     public async Task SaveAndRetrieveMessage_ReturnsStoredMessage()
@@ -79,7 +78,6 @@ public sealed class LocalMessageRepositoryTests : IAsyncDisposable
         Assert.Equal(msg.Id, results[0].Id);
     }
 
-    // ── Test 2: MessageExistsAsync returns true for saved message ────────
 
     [Fact]
     public async Task MessageExistsAsync_ReturnsTrueForSavedMessage()
@@ -96,7 +94,6 @@ public sealed class LocalMessageRepositoryTests : IAsyncDisposable
         Assert.True(exists);
     }
 
-    // ── Test 3: MessageExistsAsync returns false for unknown id ──────────
 
     [Fact]
     public async Task MessageExistsAsync_ReturnsFalseForUnknownId()
@@ -106,7 +103,6 @@ public sealed class LocalMessageRepositoryTests : IAsyncDisposable
         Assert.False(exists);
     }
 
-    // ── Test 4: Upsert and get chats ─────────────────────────────────────
 
     [Fact]
     public async Task UpsertAndGetChats_ReturnsStoredChat()
@@ -120,7 +116,6 @@ public sealed class LocalMessageRepositoryTests : IAsyncDisposable
         Assert.Equal(chat.Title, results[0].Title);
     }
 
-    // ── Test 5: Save same message twice is idempotent ────────────────────
 
     [Fact]
     public async Task SaveMessage_IsIdempotent_NoDuplicates()
@@ -138,7 +133,6 @@ public sealed class LocalMessageRepositoryTests : IAsyncDisposable
         Assert.Single(results);
     }
 
-    // ── Test 6: UpdatePlaintextBodyAsync sets plaintext and is idempotent ─
 
     [Fact]
     public async Task UpdatePlaintextBodyAsync_SetsPlaintext_OnlyWhenNull()
@@ -149,7 +143,6 @@ public sealed class LocalMessageRepositoryTests : IAsyncDisposable
         var msg = MakeMessageDto(chatId);
         await _repo.SaveMessageAsync(msg);
 
-        // First call: sets plaintext_body
         await _repo.UpdatePlaintextBodyAsync(msg.Id, "hello world");
 
         await using var verifyCmd = _conn.CreateCommand();
@@ -158,7 +151,6 @@ public sealed class LocalMessageRepositoryTests : IAsyncDisposable
         var stored = (string?)(await verifyCmd.ExecuteScalarAsync());
         Assert.Equal("hello world", stored);
 
-        // Second call: idempotent — should NOT overwrite
         await _repo.UpdatePlaintextBodyAsync(msg.Id, "different text");
 
         await using var verifyCmd2 = _conn.CreateCommand();
@@ -168,7 +160,6 @@ public sealed class LocalMessageRepositoryTests : IAsyncDisposable
         Assert.Equal("hello world", stored2);
     }
 
-    // ── Test 7: UpdatePlaintextBodyAsync populates FTS index ─────────────
 
     [Fact]
     public async Task UpdatePlaintextBodyAsync_PopulatesFtsIndex()

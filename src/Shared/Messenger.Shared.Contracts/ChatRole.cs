@@ -1,3 +1,4 @@
+// Общее перечисление/константа BitCanary: «ChatRole» (клиент + сервер).
 namespace Messenger.Shared.Contracts;
 
 public enum ChatRole

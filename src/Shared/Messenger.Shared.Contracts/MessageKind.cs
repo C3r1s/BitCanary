@@ -1,3 +1,4 @@
+// Общее перечисление/константа BitCanary: «MessageKind» (клиент + сервер).
 namespace Messenger.Shared.Contracts;
 
 public enum MessageKind

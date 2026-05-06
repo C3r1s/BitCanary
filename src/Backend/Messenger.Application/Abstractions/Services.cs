@@ -1,3 +1,4 @@
+// Интерфейсы прикладных сервисов BitCanary (сценарии use-case уровня).
 using Messenger.Application.Messages;
 using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
@@ -23,6 +24,7 @@ public interface IChatService
 {
     Task<IReadOnlyCollection<ChatSummaryDto>> GetChatsAsync(CancellationToken cancellationToken);
     Task<ChatSummaryDto> CreateChatAsync(CreateChatRequest request, CancellationToken cancellationToken);
+    Task DeleteChatAsync(Guid chatId, CancellationToken cancellationToken);
     Task<IReadOnlyCollection<FolderDto>> GetFoldersAsync(CancellationToken cancellationToken);
     Task<FolderDto> CreateFolderAsync(CreateFolderRequest request, CancellationToken cancellationToken);
     Task<ChatSummaryDto> AddMemberAsync(Guid chatId, Guid userId, CancellationToken cancellationToken);
@@ -34,6 +36,7 @@ public interface IChatService
 public interface IMessageService
 {
     Task<IReadOnlyCollection<MessageDto>> GetMessagesAsync(Guid chatId, CancellationToken cancellationToken);
+    Task ClearChatMessagesAsync(Guid chatId, CancellationToken cancellationToken);
     Task<MessageDto> SendAsync(SendMessageCommand command, CancellationToken cancellationToken);
 }
 

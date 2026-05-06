@@ -1,3 +1,4 @@
+// Перехват исключений API: единый JSON-ответ об ошибках и запись в лог.
 using System.Net;
 using System.Text.Json;
 using Messenger.Application.Common;
@@ -6,14 +7,19 @@ namespace Messenger.Api.Services;
 
 public sealed class ExceptionHandlingMiddleware
 {
-    private static readonly string LogFilePath = Path.Combine(
-        AppContext.BaseDirectory, "storage", "app.log");
+    private static readonly string LogFilePath = ResolveLogFilePath();
 
     public ExceptionHandlingMiddleware(RequestDelegate next, ILogger<ExceptionHandlingMiddleware> logger)
     {
         _next = next;
         _logger = logger;
-        Directory.CreateDirectory(Path.GetDirectoryName(LogFilePath)!);
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LogFilePath)!);
+        }
+        catch
+        {
+        }
     }
 
     private readonly RequestDelegate _next;
@@ -62,5 +68,37 @@ public sealed class ExceptionHandlingMiddleware
         catch
         {
         }
+    }
+
+    private static string ResolveLogFilePath()
+    {
+        const string fileName = "backend-app.log";
+
+        var candidates = new[]
+        {
+            Environment.GetEnvironmentVariable("BITCANARY_LOG_DIR"),
+            @"E:\Programming\CsharpProj\BitCanary\storage\logs",
+            Path.Combine(AppContext.BaseDirectory, "storage", "logs"),
+            Path.Combine(Path.GetTempPath(), "BitCanary", "logs")
+        };
+
+        foreach (var candidate in candidates)
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            try
+            {
+                Directory.CreateDirectory(candidate);
+                return Path.Combine(candidate, fileName);
+            }
+            catch
+            {
+            }
+        }
+
+        return fileName;
     }
 }

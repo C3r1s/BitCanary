@@ -1,3 +1,4 @@
+// Код-behind «UserSearchView.axaml»: обработка UI и связь с ViewModel.
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
@@ -21,7 +22,6 @@ public partial class UserSearchView : UserControl
 
     private void OnDataContextChanged(object? sender, EventArgs e)
     {
-        // bindings handle the rest
     }
 
     protected override void OnApplyTemplate(TemplateAppliedEventArgs e)
@@ -41,7 +41,6 @@ public partial class UserSearchView : UserControl
         base.OnPropertyChanged(change);
         if (change.Property == IsVisibleProperty && change.NewValue is true)
         {
-            // Auto-focus search input when view becomes visible
             _searchInput?.Focus();
         }
     }
@@ -52,8 +51,6 @@ public partial class UserSearchView : UserControl
             DataContext is UserSearchViewModel vm)
         {
             vm.SelectUserCommand.Execute(item);
-            // Defer the reset to avoid re-entrant SelectionChanged while the
-            // collection may be in the middle of an update (ArgumentOutOfRangeException).
             var list = _resultsList;
             Dispatcher.UIThread.Post(() => list.SelectedItem = null, DispatcherPriority.Background);
         }
@@ -64,10 +61,8 @@ public partial class UserSearchView : UserControl
         base.OnKeyDown(e);
         if (e.Key == Key.Escape && DataContext is UserSearchViewModel vm)
         {
-            // Reset search state and close user search mode via ToggleUserSearchCommand
             vm.Reset();
 
-            // Walk up to find the ChatListViewModel and toggle user search off
             var chatListView = this.FindAncestorOfType<ChatListView>();
             if (chatListView?.DataContext is ChatListViewModel chatListVm)
             {

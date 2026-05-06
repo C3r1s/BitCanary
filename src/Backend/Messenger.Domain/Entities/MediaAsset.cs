@@ -1,3 +1,4 @@
+// Доменная сущность «MediaAsset»: модель данных для персистентности BitCanary.
 using Messenger.Domain.Abstractions;
 
 namespace Messenger.Domain.Entities;

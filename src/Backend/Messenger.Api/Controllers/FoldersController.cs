@@ -1,3 +1,4 @@
+// Пользовательские папки для группировки чатов на сервере.
 using Messenger.Application.Abstractions;
 using Messenger.Shared.Contracts.Dtos;
 using Microsoft.AspNetCore.Authorization;

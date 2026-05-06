@@ -1,3 +1,4 @@
+// Конфигурация сущности EF Core «MessageConfiguration»: индексы, связи и ограничения.
 using Messenger.Domain.Entities;
 using Messenger.Shared.Contracts;
 using Microsoft.EntityFrameworkCore;

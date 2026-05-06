@@ -1,3 +1,4 @@
+// Контракты событий SignalR в BitCanary (payload для «RealtimeEventNames»).
 namespace Messenger.Shared.Contracts.Realtime;
 
 public static class RealtimeEventNames
@@ -9,4 +10,6 @@ public static class RealtimeEventNames
     public const string OtpkSupplyLow = "OtpkSupplyLow";
     public const string MessageDelivered = "MessageDelivered";
     public const string MessageRead = "MessageRead";
+
+    public const string RemovedFromChat = "RemovedFromChat";
 }

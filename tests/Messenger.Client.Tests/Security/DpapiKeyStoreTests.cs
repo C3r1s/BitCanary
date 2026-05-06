@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «DpapiKeyStoreTests».
 using System.Security.Cryptography;
 using Messenger.Client.Avalonia.Services;
 using Microsoft.AspNetCore.DataProtection;

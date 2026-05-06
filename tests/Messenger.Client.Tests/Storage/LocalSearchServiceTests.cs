@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «LocalSearchServiceTests».
 using Messenger.Client.Avalonia.Services;
 using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
@@ -6,7 +7,6 @@ using Xunit;
 
 namespace Messenger.Client.Tests.Storage;
 
-// Minimal stub for IClientSessionService used in search tests.
 file sealed class StubSessionServiceForSearch : IClientSessionService
 {
     public string ApiBaseUrl => string.Empty;
@@ -77,7 +77,6 @@ public sealed class LocalSearchServiceTests : IAsyncDisposable
         msgCmd.ExecuteNonQuery();
     }
 
-    // ── Test 1: Returns matching message ──────────────────────────────────
 
     [Fact]
     public async Task SearchAsync_ReturnsMatchingMessage()
@@ -93,7 +92,6 @@ public sealed class LocalSearchServiceTests : IAsyncDisposable
         Assert.Contains("[hello]", results[0].Snippet);
     }
 
-    // ── Test 2: Filters by chatId ─────────────────────────────────────────
 
     [Fact]
     public async Task SearchAsync_FiltersByChatId()
@@ -113,7 +111,6 @@ public sealed class LocalSearchServiceTests : IAsyncDisposable
         Assert.Equal(chatA, results[0].ChatId);
     }
 
-    // ── Test 3: Empty query returns empty list ────────────────────────────
 
     [Fact]
     public async Task SearchAsync_EmptyQuery_ReturnsEmptyList()
@@ -126,7 +123,6 @@ public sealed class LocalSearchServiceTests : IAsyncDisposable
         Assert.Empty(results);
     }
 
-    // ── Test 4: Whitespace query returns empty list ───────────────────────
 
     [Fact]
     public async Task SearchAsync_WhitespaceQuery_ReturnsEmptyList()
@@ -139,7 +135,6 @@ public sealed class LocalSearchServiceTests : IAsyncDisposable
         Assert.Empty(results);
     }
 
-    // ── Test 5: Special characters do not throw ───────────────────────────
 
     [Fact]
     public async Task SearchAsync_SpecialCharacters_NoException()
@@ -147,13 +142,11 @@ public sealed class LocalSearchServiceTests : IAsyncDisposable
         var chatId = Guid.NewGuid();
         InsertTestMessage(chatId, Guid.NewGuid(), "sender1", "hello world");
 
-        // unbalanced quote, dangling OR — should be sanitised without crashing
         var ex = await Record.ExceptionAsync(() => _search.SearchAsync("hello \"world"));
 
         Assert.Null(ex);
     }
 
-    // ── Test 6: No matches returns empty list ─────────────────────────────
 
     [Fact]
     public async Task SearchAsync_NoMatches_ReturnsEmptyList()
@@ -166,7 +159,6 @@ public sealed class LocalSearchServiceTests : IAsyncDisposable
         Assert.Empty(results);
     }
 
-    // ── Test 7: BM25 ranking orders results correctly ─────────────────────
 
     [Fact]
     public async Task SearchAsync_RanksByBm25()
@@ -175,18 +167,15 @@ public sealed class LocalSearchServiceTests : IAsyncDisposable
         var msgLow = Guid.NewGuid();
         var msgHigh = Guid.NewGuid();
 
-        // Insert in reverse order: lower-ranked first, higher-ranked second
         InsertTestMessage(chatId, msgLow, "sender1", "search once here", sentAt: "2024-01-01T00:00:00Z");
         InsertTestMessage(chatId, msgHigh, "sender2", "search search search many times", sentAt: "2024-01-02T00:00:00Z");
 
         var results = await _search.SearchAsync("search");
 
-        // Both results should appear; the one with more occurrences ranks higher (first)
         Assert.Equal(2, results.Count);
         Assert.Equal(msgHigh, results[0].MessageId);
     }
 
-    // ── Test 8: Snippet contains chat name ────────────────────────────────
 
     [Fact]
     public async Task SearchAsync_ReturnsChatName()

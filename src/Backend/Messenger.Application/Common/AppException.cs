@@ -1,3 +1,4 @@
+// Типизированное исключение домена с HTTP-кодом для API BitCanary.
 using System.Net;
 
 namespace Messenger.Application.Common;

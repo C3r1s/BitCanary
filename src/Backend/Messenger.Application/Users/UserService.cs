@@ -1,3 +1,4 @@
+// Профиль, настройки интерфейса и поиск пользователей по имени.
 using Messenger.Application.Abstractions;
 using Messenger.Application.Common;
 using Messenger.Shared.Contracts.Dtos;
@@ -53,6 +54,9 @@ public sealed class UserService(IAppDbContext dbContext, ICurrentUserContext cur
         settings.SendByEnter = request.SendByEnter;
         settings.UseCompactMode = request.UseCompactMode;
         settings.EnableCustomEmoji = request.EnableCustomEmoji;
+        settings.ShowNotifications = request.ShowNotifications;
+        settings.ShowSenderName = request.ShowSenderName;
+        settings.TerminalColorScheme = request.TerminalColorScheme;
 
         await dbContext.SaveChangesAsync(cancellationToken);
 

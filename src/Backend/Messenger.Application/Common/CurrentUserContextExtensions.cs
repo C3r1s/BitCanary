@@ -1,3 +1,4 @@
+// Удобные методы получения текущего userId из ICurrentUserContext.
 using System.Net;
 using Messenger.Application.Abstractions;
 

@@ -1,3 +1,4 @@
+// Базовый тип сущности с идентификатором для домена BitCanary.
 namespace Messenger.Domain.Abstractions;
 
 public abstract class Entity

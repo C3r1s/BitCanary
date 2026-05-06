@@ -1,3 +1,4 @@
+// Хеширование и проверка паролей через BCrypt.
 using Messenger.Application.Abstractions;
 
 namespace Messenger.Infrastructure.Services;

@@ -1,3 +1,4 @@
+// Регистрация инфраструктуры BitCanary: БД, JWT, хранилище файлов, сервисы.
 using Messenger.Application.Abstractions;
 using Messenger.Application.Auth;
 using Messenger.Application.Calls;

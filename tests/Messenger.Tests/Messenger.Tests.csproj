@@ -31,11 +31,11 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\Messenger.Api\Messenger.Api.csproj" />
-    <ProjectReference Include="..\Messenger.Application\Messenger.Application.csproj" />
-    <ProjectReference Include="..\Messenger.Domain\Messenger.Domain.csproj" />
-    <ProjectReference Include="..\Messenger.Infrastructure\Messenger.Infrastructure.csproj" />
-    <ProjectReference Include="..\..\Shared\Messenger.Shared.Contracts\Messenger.Shared.Contracts.csproj" />
-    <ProjectReference Include="..\..\Client\Messenger.Client.Avalonia\Messenger.Client.Avalonia.csproj" />
+    <ProjectReference Include="..\..\src\Backend\Messenger.Api\Messenger.Api.csproj" />
+    <ProjectReference Include="..\..\src\Backend\Messenger.Application\Messenger.Application.csproj" />
+    <ProjectReference Include="..\..\src\Backend\Messenger.Domain\Messenger.Domain.csproj" />
+    <ProjectReference Include="..\..\src\Backend\Messenger.Infrastructure\Messenger.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Shared\Messenger.Shared.Contracts\Messenger.Shared.Contracts.csproj" />
+    <ProjectReference Include="..\..\src\Client\Messenger.Client.Avalonia\Messenger.Client.Avalonia.csproj" />
   </ItemGroup>
 </Project>

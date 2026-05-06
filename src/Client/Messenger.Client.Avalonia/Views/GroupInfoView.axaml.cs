@@ -1,3 +1,4 @@
+// Код-behind «GroupInfoView.axaml»: обработка UI и связь с ViewModel.
 using Avalonia.Controls;
 using Avalonia.Input;
 using Messenger.Client.Avalonia.ViewModels;

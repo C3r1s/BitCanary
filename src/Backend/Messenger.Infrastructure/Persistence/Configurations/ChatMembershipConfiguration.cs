@@ -1,3 +1,4 @@
+// Конфигурация сущности EF Core «ChatMembershipConfiguration»: индексы, связи и ограничения.
 using Messenger.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;

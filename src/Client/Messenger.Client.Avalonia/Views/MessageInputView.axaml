@@ -1,3 +1,4 @@
+<!-- Разметка экрана BitCanary «MessageInputView»: поля, списки и панели (Avalonia). -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
@@ -8,7 +9,7 @@
     <Border Padding="10,8">
       <Grid RowDefinitions="Auto,*">
 
-        <!-- Attachment chip -->
+        
         <Border Grid.Row="0"
                 IsVisible="{Binding PendingAttachmentName, Converter={x:Static ObjectConverters.IsNotNull}}"
                 Background="#161616"
@@ -31,28 +32,38 @@
           </StackPanel>
         </Border>
 
-        <!-- Input row -->
-        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+        
+        <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8" Height="38">
 
-          <!-- Attach button -->
+          
           <Button Grid.Column="0"
                   Content="[+]"
-                  MinHeight="36"
+                  Height="38"
+                  MinHeight="38"
                   Background="Transparent"
                   Foreground="#505050"
                   BorderThickness="0"
+                  FontSize="14"
+                  Padding="6,0"
                   VerticalAlignment="Center"
+                  HorizontalContentAlignment="Center"
+                  VerticalContentAlignment="Center"
                   ToolTip.Tip="Attach file"
                   Click="OnAttachClicked" />
 
-          <!-- Emoji button -->
+          
           <Button Grid.Column="1"
                   Content="[:)]"
-                  MinHeight="36"
+                  Height="38"
+                  MinHeight="38"
                   Background="Transparent"
                   Foreground="#505050"
                   BorderThickness="0"
+                  FontSize="14"
+                  Padding="6,0"
                   VerticalAlignment="Center"
+                  HorizontalContentAlignment="Center"
+                  VerticalContentAlignment="Center"
                   ToolTip.Tip="Emoji">
             <Button.Flyout>
               <Flyout Placement="TopEdgeAlignedLeft">
@@ -96,8 +107,8 @@
             </Button.Flyout>
           </Button>
 
-          <!-- Text input with > prompt prefix -->
-          <Grid Grid.Column="2" ColumnDefinitions="Auto,*">
+          
+          <Grid Grid.Column="2" ColumnDefinitions="Auto,*" VerticalAlignment="Center">
             <TextBlock Grid.Column="0"
                        Text=">"
                        Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
@@ -105,21 +116,32 @@
                        VerticalAlignment="Center"
                        Margin="0,0,6,0" />
             <TextBox Grid.Column="1"
+                     x:Name="MessageInputBox"
                      AcceptsReturn="True"
-                     MinHeight="36"
-                     TextWrapping="Wrap"
+                     Height="34"
+                     MinHeight="34"
+                     FontSize="14"
+                     Padding="8,0,8,1"
+                     VerticalContentAlignment="Center"
+                     TextWrapping="NoWrap"
                      Watermark="write an encrypted message..."
                      Text="{Binding Text, Mode=TwoWay}"
                      Background="Transparent"
                      BorderThickness="0" />
           </Grid>
 
-          <!-- Send button -->
+          
           <Button Grid.Column="3"
                   MinWidth="80"
-                  VerticalAlignment="Stretch"
+                  Height="38"
+                  MinHeight="38"
+                  VerticalAlignment="Center"
+                  HorizontalContentAlignment="Center"
+                  VerticalContentAlignment="Center"
+                  Padding="12,0"
                   Command="{Binding SendCommand}"
                   Content="[SEND]"
+                  FontSize="14"
                   Background="#003D2A"
                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                   BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
@@ -129,7 +151,7 @@
       </Grid>
     </Border>
 
-    <!-- Block overlay — identity not verified -->
+    
     <Border Background="#CC000000"
             IsVisible="{Binding IsBlockedForKeyVerification}">
       <TextBlock Text="verify identity to continue"

@@ -1,3 +1,4 @@
+// Абстракция слоя Application BitCanary: «IPasswordHasher».
 namespace Messenger.Application.Abstractions;
 
 public interface IPasswordHasher

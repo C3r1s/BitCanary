@@ -1,9 +1,11 @@
+// Автотест BitCanary: проверка «KeyBundleServiceTests».
 using FluentAssertions;
 using Messenger.Application.Abstractions;
 using Messenger.Application.Keys;
 using Messenger.Domain.Entities;
 using Messenger.Shared.Contracts.Dtos;
 using Messenger.Tests.Fakes;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Messenger.Tests;
 
@@ -14,13 +16,12 @@ public sealed class KeyBundleServiceTests
         var db = FakeDbContextFactory.Create();
         var spk = new FakeSpkValidator { Result = true };
         var notifier = FakeRealtimeNotifier.Create();
-        return (new KeyBundleService(db, spk, notifier), db, spk, notifier);
+        return (new KeyBundleService(db, spk, notifier, NullLogger<KeyBundleService>.Instance), db, spk, notifier);
     }
 
     [Fact]
     public async Task UploadBundle_NewDevice_SavesAndReturnsDeviceId()
     {
-        // Arrange
         var (sut, db, _, _) = CreateDeps();
         var userId = Guid.NewGuid();
         var (ikPublic, spkPublic, spkSignature) = TestKeys.GenerateSignedSpkBundle();
@@ -30,13 +31,10 @@ public sealed class KeyBundleServiceTests
             SpkPublic: spkPublic,
             SpkSignature: spkSignature);
 
-        // Act
         var response = await sut.UploadBundleAsync(userId, request, CancellationToken.None);
 
-        // Assert — response carries server-assigned DeviceId
         response.DeviceId.Should().NotBe(Guid.Empty);
 
-        // Assert — row persisted with correct fields
         var persisted = db.UserKeyBundles.Single();
         persisted.UserId.Should().Be(userId);
         persisted.DeviceId.Should().Be(response.DeviceId);
@@ -48,7 +46,6 @@ public sealed class KeyBundleServiceTests
     [Fact]
     public async Task GetBundle_AfterUpload_ReturnsStoredBundle()
     {
-        // Arrange
         var (sut, _, _, _) = CreateDeps();
         var userId = Guid.NewGuid();
         var (ikPublic, spkPublic, spkSignature) = TestKeys.GenerateSignedSpkBundle();
@@ -57,10 +54,8 @@ public sealed class KeyBundleServiceTests
             new KeyBundleUploadRequest(null, ikPublic, spkPublic, spkSignature),
             CancellationToken.None);
 
-        // Act
         var result = await sut.GetBundleAsync(userId, CancellationToken.None);
 
-        // Assert
         result.Should().NotBeNull();
         result!.UserId.Should().Be(userId);
         result.IkPublic.Should().BeEquivalentTo(ikPublic);
@@ -71,7 +66,6 @@ public sealed class KeyBundleServiceTests
     [Fact]
     public async Task GetBundle_WithUnclaimedOpk_AtomicallyClaims()
     {
-        // Arrange — seed bundle + one unclaimed OPK
         var (sut, db, _, _) = CreateDeps();
         var userId = Guid.NewGuid();
         var bundle = new UserKeyBundle
@@ -89,22 +83,18 @@ public sealed class KeyBundleServiceTests
         {
             UserId = userId,
             PublicKey = opkBytes
-            // ClaimedAt intentionally null
         };
         db.UserKeyBundles.Add(bundle);
         db.OneTimePreKeys.Add(opk);
         await db.SaveChangesAsync();
 
-        // Act
         var result = await sut.GetBundleAsync(userId, CancellationToken.None);
 
-        // Assert — DTO carries OPK
         result.Should().NotBeNull();
         result!.OpkPublic.Should().NotBeNull();
         result.OpkPublic!.Should().BeEquivalentTo(opkBytes);
         result.OpkId.Should().Be(opk.Id);
 
-        // Assert — row is now claimed (atomic claim via InMemory branch)
         var refreshed = db.OneTimePreKeys.Single(x => x.Id == opk.Id);
         refreshed.ClaimedAt.Should().NotBeNull();
     }
@@ -112,8 +102,6 @@ public sealed class KeyBundleServiceTests
     [Fact]
     public async Task GetBundle_TwoBundlesExist_ReturnsNewest()
     {
-        // FIX-02 regression guard — before fix, two bundles for one user threw InvalidOperationException.
-        // Arrange
         var (sut, db, _, _) = CreateDeps();
         var userId = Guid.NewGuid();
         var olderDeviceId = Guid.NewGuid();
@@ -140,10 +128,8 @@ public sealed class KeyBundleServiceTests
         db.UserKeyBundles.Add(newer);
         await db.SaveChangesAsync();
 
-        // Act
         var result = await sut.GetBundleAsync(userId, CancellationToken.None);
 
-        // Assert — OrderByDescending(SpkCreatedAt) must pick the newer row
         result.Should().NotBeNull();
         result!.DeviceId.Should().Be(newerDeviceId);
     }
@@ -151,7 +137,6 @@ public sealed class KeyBundleServiceTests
     [Fact]
     public async Task GetBundle_EmptyOpkPool_ReturnsNullOpkFields()
     {
-        // Arrange — bundle exists, zero OPKs
         var (sut, db, _, _) = CreateDeps();
         var userId = Guid.NewGuid();
         var bundle = new UserKeyBundle
@@ -166,10 +151,8 @@ public sealed class KeyBundleServiceTests
         db.UserKeyBundles.Add(bundle);
         await db.SaveChangesAsync();
 
-        // Act
         var result = await sut.GetBundleAsync(userId, CancellationToken.None);
 
-        // Assert
         result.Should().NotBeNull();
         result!.OpkPublic.Should().BeNull();
         result.OpkId.Should().BeNull();

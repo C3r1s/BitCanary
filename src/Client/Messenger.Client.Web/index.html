@@ -11,12 +11,12 @@
         <!-- Login Screen -->
         <div id="login-screen" class="screen">
             <div class="login-box">
-                <h1>BitCanary</h1>
+                <h1 class="login-brand">BITCANARY</h1>
                 <p class="subtitle">Encrypted Messenger</p>
                 <form id="login-form">
-                    <input type="text" id="username" placeholder="Username" required>
-                    <input type="password" id="password" placeholder="Password" required>
-                    <button type="submit">Sign In</button>
+                    <input type="text" id="username" placeholder="Username" required autocomplete="username">
+                    <input type="password" id="password" placeholder="Password" required autocomplete="current-password">
+                    <button type="submit" class="btn-primary">[ SIGN IN ]</button>
                 </form>
                 <p id="login-error" class="error hidden"></p>
             </div>
@@ -24,34 +24,165 @@
 
         <!-- Main Screen -->
         <div id="main-screen" class="screen hidden">
-            <!-- Header -->
-            <header>
-                <span id="current-user"></span>
-                <button id="logout-btn">Logout</button>
+            <header id="topbar">
+                <span class="brand">[ BITCANARY ]</span>
+                <span id="topbar-status" class="topbar-status"></span>
+                <div class="topbar-right">
+                    <span class="online-indicator"><span class="dot"></span>ONLINE</span>
+                    <button id="topbar-refresh-btn" type="button" class="btn-ghost">[ REFRESH ]</button>
+                    <span id="current-user" class="current-user-label"></span>
+                </div>
             </header>
 
             <div class="content">
-                <!-- Chat List -->
                 <aside id="chat-list">
-                    <div class="chat-list-header">CHANNELS</div>
+                    <div class="chat-list-header">
+                        <span class="channels-label">CHANNELS</span>
+                        <div class="chat-list-quick">
+                            <button id="create-group-btn" type="button" class="btn-inline" title="Create a group">[ G ]</button>
+                            <button id="sidebar-search-btn" type="button" class="btn-inline" title="Search">[ / ]</button>
+                        </div>
+                    </div>
+                    <div id="chat-filter-wrap" class="chat-filter-wrap">
+                        <input type="text" id="chat-filter-input" class="chat-filter-input" placeholder="filter conversations..." autocomplete="off">
+                    </div>
                     <div id="chats"></div>
+                    <div id="sidebar-footer">
+                        <button id="sidebar-settings-btn" type="button" class="btn-settings-footer">[ SETTINGS ]</button>
+                    </div>
                 </aside>
 
                 <!-- Chat Window -->
                 <main id="chat-window">
                     <div id="chat-header">
-                        <span id="chat-title">Select a chat</span>
+                        <div class="chat-header-titles">
+                            <span id="chat-title" class="chat-title-text">Select a chat</span>
+                            <span id="chat-subtitle" class="chat-subtitle-text"></span>
+                        </div>
+                        <div id="chat-tools">
+                            <button id="group-info-btn" type="button" class="btn-header-tool hidden" title="Group info">[ INFO ]</button>
+                            <span id="chat-trust-badge" class="trust-badge hidden" aria-live="polite"></span>
+                            <button id="safety-number-btn" type="button" class="btn-safety hidden" disabled>[safety#]</button>
+                        </div>
                     </div>
+                    <div id="decrypt-log" class="hidden"></div>
                     <div id="messages"></div>
-                    <form id="message-form">
-                        <input type="text" id="message-input" placeholder="Type a message..." disabled>
-                        <button type="submit" disabled>Send</button>
+                    <form id="message-form" class="message-form">
+                        <input type="file" id="file-input" class="hidden" aria-hidden="true" tabindex="-1">
+                        <div id="attachment-chip" class="attachment-chip hidden">
+                            <span class="attachment-chip-label" id="attachment-chip-name"></span>
+                            <button type="button" id="attachment-chip-clear" class="attachment-chip-clear" title="Remove">×</button>
+                        </div>
+                        <div class="message-input-toolbar">
+                            <button type="button" id="attach-btn" class="btn-input-side" title="Attach file" disabled>[+]</button>
+                            <button type="button" id="emoji-btn" class="btn-input-side" title="Emoji">[:)]</button>
+                            <div class="message-input-combo">
+                                <span class="input-prompt">&gt;</span>
+                                <input type="text" id="message-input" class="message-input-field" placeholder="write an encrypted message..." disabled autocomplete="off">
+                            </div>
+                            <button type="submit" id="send-btn" class="btn-send" disabled>[SEND]</button>
+                        </div>
                     </form>
                 </main>
             </div>
         </div>
     </div>
+    <div id="chat-context-menu" class="context-menu hidden">
+        <button id="ctx-clear-chat-btn" type="button">Clear messages</button>
+        <button id="ctx-delete-chat-btn" type="button" class="danger">Delete chat</button>
+    </div>
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-panel">
+            <h3>Settings</h3>
+            <div class="modal-content">
+                <button id="clear-local-cache-btn" type="button">Clear local decrypted cache</button>
+                <button id="reset-encryption-btn" type="button" class="danger-action">Reset encryption keys (republish)</button>
+                <button id="settings-logout-btn" type="button" class="btn-logout-settings">[ LOG OUT ]</button>
+                <div id="settings-status" class="modal-status hidden"></div>
+            </div>
+            <div class="modal-actions">
+                <button id="close-settings-btn" type="button">[ CLOSE ]</button>
+            </div>
+        </div>
+    </div>
+    <div id="search-modal" class="modal hidden">
+        <div class="modal-panel">
+            <h3>Search</h3>
+            <div class="modal-content">
+                <input id="search-modal-input" type="text" placeholder="search messages or @users..." autocomplete="off">
+                <div id="search-modal-user-results" class="modal-user-results hidden"></div>
+                <div id="search-modal-status" class="modal-status hidden"></div>
+            </div>
+            <div class="modal-actions">
+                <button id="search-modal-clear-btn" type="button">[ CLEAR ]</button>
+                <button id="search-modal-cancel-btn" type="button">[ CANCEL ]</button>
+                <button id="search-modal-apply-btn" type="button">[ APPLY ]</button>
+            </div>
+        </div>
+    </div>
+    <div id="group-info-modal" class="modal hidden">
+        <div class="modal-panel group-info-panel">
+            <div class="group-info-header">
+                <div id="group-info-title-display" class="group-info-title-display"></div>
+                <input type="text" id="group-info-title-edit" class="group-info-field-edit hidden" autocomplete="off">
+                <div id="group-info-desc-display" class="group-info-desc-display"></div>
+                <input type="text" id="group-info-desc-edit" class="group-info-field-edit hidden" placeholder="description..." autocomplete="off">
+            </div>
+            <div class="group-info-toolbar">
+                <button type="button" id="group-info-edit-btn" class="btn-group-info-muted">[ EDIT ]</button>
+                <button type="button" id="group-info-leave-btn" class="btn-group-info-danger">[ LEAVE GROUP ]</button>
+                <button type="button" id="group-info-save-btn" class="btn-group-info-primary hidden">[ SAVE ]</button>
+                <button type="button" id="group-info-cancel-edit-btn" class="btn-group-info-danger hidden">[ CANCEL ]</button>
+            </div>
+            <div class="group-info-members-heading">MEMBERS (<span id="group-info-member-count">0</span>)</div>
+            <div id="group-info-invite-row" class="group-info-invite-row hidden">
+                <input type="text" id="group-info-invite-input" placeholder="username to add..." autocomplete="off">
+                <button type="button" id="group-info-add-member-btn" class="btn-group-info-primary">[ ADD ]</button>
+            </div>
+            <div id="group-info-members" class="group-info-members"></div>
+            <div id="group-info-error" class="group-info-error-banner hidden"></div>
+            <button type="button" id="group-info-close-btn" class="btn-group-info-close">[ CLOSE ]</button>
+        </div>
+    </div>
+    <div id="group-modal" class="modal hidden">
+        <div class="modal-panel">
+            <h3>Create Group</h3>
+            <div class="modal-content">
+                <input id="group-title-input" type="text" placeholder="Group title">
+                <input id="group-members-input" type="text" placeholder="Usernames, comma-separated">
+                <div id="group-modal-status" class="modal-status hidden"></div>
+            </div>
+            <div class="modal-actions">
+                <button id="group-modal-cancel-btn" type="button">[ CANCEL ]</button>
+                <button id="group-modal-create-btn" type="button">[ CREATE ]</button>
+            </div>
+        </div>
+    </div>
+    <div id="safety-number-modal" class="modal hidden">
+        <div class="modal-panel">
+            <h3>Safety Number</h3>
+            <div class="modal-content">
+                <div id="safety-number-text">Safety number unavailable</div>
+            </div>
+            <div class="modal-actions">
+                <button id="close-safety-number-btn" type="button">[ CLOSE ]</button>
+            </div>
+        </div>
+    </div>
+    <div id="dialog-modal" class="modal hidden">
+        <div class="modal-panel">
+            <h3 id="dialog-title">Confirm</h3>
+            <div class="modal-content">
+                <div id="dialog-message"></div>
+            </div>
+            <div class="modal-actions">
+                <button id="dialog-cancel-btn" type="button">[ CANCEL ]</button>
+                <button id="dialog-ok-btn" type="button">[ OK ]</button>
+            </div>
+        </div>
+    </div>
 
+    <script src="https://unpkg.com/libsodium@0.7.15/dist/modules/libsodium.js"></script>
     <script src="https://unpkg.com/libsodium-wrappers@0.7.15/dist/modules/libsodium-wrappers.js"></script>
     <script src="https://unpkg.com/@microsoft/signalr@8.0.0/dist/browser/signalr.min.js"></script>
     <script src="crypto.js"></script>

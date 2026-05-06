@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «ClientSessionServiceTests».
 using System.Text.Json;
 using Messenger.Client.Avalonia.Services;
 using Microsoft.AspNetCore.DataProtection;
@@ -18,7 +19,6 @@ public sealed class ClientSessionServiceTests : IDisposable
 
     public ClientSessionServiceTests()
     {
-        // Ensure a clean slate — delete any leftover session.json from a prior run.
         if (File.Exists(SessionFilePath)) File.Delete(SessionFilePath);
 
         _dpKeysDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString());
@@ -68,11 +68,9 @@ public sealed class ClientSessionServiceTests : IDisposable
         var userId = Guid.NewGuid();
         var fakeJwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.signature";
 
-        // Instance A writes
         var svcA = new ClientSessionService(provider);
         svcA.SetSession(userId, "alice", fakeJwt);
 
-        // Instance B reads — same provider = same protector = successful unprotect
         var svcB = new ClientSessionService(provider);
 
         Assert.True(svcB.IsAuthenticated);
@@ -84,7 +82,6 @@ public sealed class ClientSessionServiceTests : IDisposable
     [Fact]
     public void LegacyPlaintextFile_IsDetectedAndDeleted()
     {
-        // Pre-seed a v1.0 plaintext session file (AccessToken starts with "eyJ").
         Directory.CreateDirectory(Path.GetDirectoryName(SessionFilePath)!);
         var legacyJwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJhbGljZSJ9.signature";
         var legacyPayload = $$"""
@@ -104,7 +101,6 @@ public sealed class ClientSessionServiceTests : IDisposable
     [Fact]
     public void CorruptBlob_IsDiscardedGracefully()
     {
-        // Pre-seed a file with a token that does NOT start with "eyJ" but is also not a valid DPAPI blob.
         Directory.CreateDirectory(Path.GetDirectoryName(SessionFilePath)!);
         var corruptPayload = $$"""
             {"userId":"{{Guid.NewGuid()}}","userName":"alice","accessToken":"not-base64-not-a-jwt-just-garbage"}

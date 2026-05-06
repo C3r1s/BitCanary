@@ -1,13 +1,12 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+// Миграция схемы БД BitCanary: применение изменений к PostgreSQL.
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
 namespace Messenger.Infrastructure.Persistence.Migrations
 {
-    /// <inheritdoc />
     public partial class AddNotificationSettings : Migration
     {
-        /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.AddColumn<bool>(
@@ -25,7 +24,6 @@ namespace Messenger.Infrastructure.Persistence.Migrations
                 defaultValue: true);
         }
 
-        /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropColumn(

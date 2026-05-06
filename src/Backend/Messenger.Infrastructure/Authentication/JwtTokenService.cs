@@ -1,3 +1,4 @@
+// Подпись и выпуск access JWT для пользователей BitCanary.
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;

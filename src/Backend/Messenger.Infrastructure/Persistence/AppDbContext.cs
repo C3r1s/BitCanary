@@ -1,3 +1,4 @@
+// EF Core контекст PostgreSQL: таблицы пользователей, чатов, сообщений и ключей.
 using Messenger.Application.Abstractions;
 using Messenger.Domain.Entities;
 using Microsoft.EntityFrameworkCore;

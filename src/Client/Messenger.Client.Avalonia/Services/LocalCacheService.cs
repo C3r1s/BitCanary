@@ -1,3 +1,4 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «LocalCacheService».
 using System.Text.Json;
 
 namespace Messenger.Client.Avalonia.Services;

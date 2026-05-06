@@ -1,3 +1,4 @@
+// Доставка событий через SignalR группам чатов и отдельным соединениям пользователей.
 using Messenger.Application.Abstractions;
 using Messenger.Api.Hubs;
 using Messenger.Shared.Contracts.Dtos;
@@ -61,5 +62,17 @@ public sealed class SignalRRealtimeNotifier(
     {
         await hubContext.Clients.Group(chatId.ToString())
             .SendAsync(RealtimeEventNames.MessageRead, chatId, readByUserId, cancellationToken);
+    }
+
+    public async Task SendRemovedFromChatAsync(Guid chatId, Guid affectedUserId, CancellationToken cancellationToken)
+    {
+        var connections = connectionMappingService.GetConnections(affectedUserId);
+        if (connections.Count == 0)
+        {
+            return;
+        }
+
+        await hubContext.Clients.Clients(connections)
+            .SendAsync(RealtimeEventNames.RemovedFromChat, chatId, cancellationToken);
     }
 }

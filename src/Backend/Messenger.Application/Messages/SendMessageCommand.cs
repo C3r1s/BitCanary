@@ -1,3 +1,4 @@
+// Данные команды отправки сообщения для обработчика BitCanary.
 using Messenger.Shared.Contracts;
 
 namespace Messenger.Application.Messages;

@@ -1,3 +1,4 @@
+// Доменная сущность «Chat»: модель данных для персистентности BitCanary.
 using Messenger.Domain.Abstractions;
 using Messenger.Shared.Contracts;
 

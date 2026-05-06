@@ -1,3 +1,4 @@
+// Конфигурация сущности EF Core «UserSettingsConfiguration»: индексы, связи и ограничения.
 using Messenger.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -24,6 +25,10 @@ public sealed class UserSettingsConfiguration : IEntityTypeConfiguration<UserSet
         builder.Property(x => x.ShowSenderName)
             .HasColumnName("show_sender_name")
             .HasDefaultValue(true)
+            .IsRequired();
+        builder.Property(x => x.TerminalColorScheme)
+            .HasColumnName("terminal_color_scheme")
+            .HasDefaultValue(Messenger.Shared.Contracts.TerminalColorScheme.MatrixGreen)
             .IsRequired();
 
         builder.HasIndex(x => x.UserId).IsUnique();

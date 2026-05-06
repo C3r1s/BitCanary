@@ -1,3 +1,4 @@
+// Общее перечисление/константа BitCanary: «ChatType» (клиент + сервер).
 namespace Messenger.Shared.Contracts;
 
 public enum ChatType

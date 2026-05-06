@@ -1,3 +1,4 @@
+// Контракт доступа к данным для слоя Application: DbSet сущностей BitCanary.
 using Messenger.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 

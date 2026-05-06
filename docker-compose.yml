@@ -27,6 +27,7 @@ services:
       Jwt__Issuer: Messenger.Api
       Jwt__Audience: Messenger.Client
       Storage__RootPath: /app/storage
+      BITCANARY_LOG_DIR: /app/storage/logs
     volumes:
       - ./storage:/app/storage
     depends_on:

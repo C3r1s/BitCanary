@@ -1,3 +1,4 @@
+<!-- Главное окно BitCanary: тёмный терминальный UI, боковая панель чатов и область переписки. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -16,9 +17,7 @@
 
   <Panel>
 
-    <!-- ═══════════════════════════════════════════════════════════
-         MIGRATION OVERLAY
-    ═══════════════════════════════════════════════════════════════ -->
+    
     <Grid IsVisible="{Binding IsMigrating}"
           Background="#C0000000"
           ZIndex="50">
@@ -33,9 +32,7 @@
       </Border>
     </Grid>
 
-    <!-- ═══════════════════════════════════════════════════════════
-         SAFETY NUMBER OVERLAY
-    ═══════════════════════════════════════════════════════════════ -->
+    
     <Grid IsVisible="{Binding IsShowingSafetyNumber}"
           Background="#CC000000"
           ZIndex="100"
@@ -47,9 +44,7 @@
       </Border>
     </Grid>
 
-    <!-- ═══════════════════════════════════════════════════════════
-         SETTINGS OVERLAY
-    ═══════════════════════════════════════════════════════════════ -->
+    
     <Grid IsVisible="{Binding IsShowingSettings}"
           Background="#CC000000"
           ZIndex="100"
@@ -61,66 +56,101 @@
       </Border>
     </Grid>
 
-    <!-- ═══════════════════════════════════════════════════════════
-         LOGIN SCREEN
-    ═══════════════════════════════════════════════════════════════ -->
+    
+    <Grid IsVisible="{Binding IsConfirmingDeleteChat}"
+          Background="#CC000000"
+          ZIndex="110"
+          PointerPressed="DeleteChatScrim_PointerPressed">
+      <Border CornerRadius="0" Padding="20" MaxWidth="520"
+              VerticalAlignment="Center" HorizontalAlignment="Center"
+              Background="#111111" BorderBrush="#1E1E1E" BorderThickness="1">
+        <StackPanel Spacing="14">
+          <TextBlock Text="Delete chat?"
+                     FontSize="15"
+                     FontWeight="Bold"
+                     Foreground="#E05050" />
+          <TextBlock Text="{Binding PendingDeleteChatTitle}"
+                     FontSize="12"
+                     Foreground="#C8C8C8"
+                     TextWrapping="Wrap" />
+          <TextBlock Text="This will remove the chat from UI and clear all local message history."
+                     FontSize="11"
+                     Foreground="#7A7A7A"
+                     TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal"
+                      HorizontalAlignment="Right"
+                      Spacing="8">
+            <Button Content="[ CANCEL ]"
+                    Command="{Binding CancelDeleteChatCommand}"
+                    Background="Transparent"
+                    Foreground="#C8C8C8"
+                    BorderBrush="#404040"
+                    BorderThickness="1"
+                    Padding="10,4" />
+            <Button Content="[ DELETE ]"
+                    Command="{Binding ConfirmDeleteChatCommand}"
+                    Background="#1A0505"
+                    Foreground="#E05050"
+                    BorderBrush="#E05050"
+                    BorderThickness="1"
+                    Padding="10,4" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    
     <Grid IsVisible="{Binding !IsLoggedIn}" Background="#0A0A0A">
       <views:LoginView DataContext="{Binding LoginVm}" />
     </Grid>
 
-    <!-- ═══════════════════════════════════════════════════════════
-         MAIN MESSENGER
-    ═══════════════════════════════════════════════════════════════ -->
+    
     <Grid RowDefinitions="Auto,Auto,*" IsVisible="{Binding IsLoggedIn}">
 
-      <!-- Row 0: Flat status bar -->
+      
       <Border Grid.Row="0"
               Background="#0D0D0D"
               BorderBrush="#1E1E1E"
               BorderThickness="0,0,0,1"
               Padding="16,9">
-        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto" ColumnSpacing="12">
+        <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="16">
           <TextBlock Grid.Column="0"
                      Text="[ BITCANARY ]"
-                     FontSize="13" FontWeight="Bold"
+                     FontSize="14" FontWeight="Bold"
                      Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                      VerticalAlignment="Center" />
           <TextBlock Grid.Column="1"
                      Text="{Binding StatusMessage}"
-                     FontSize="12" Foreground="#484848"
+                     FontSize="14" Foreground="#484848"
                      VerticalAlignment="Center" />
+
           
-          <!-- Connection status -->
-          <TextBlock Grid.Column="2" Text="● ONLINE" FontSize="12" Foreground="#00CC66"
+          <TextBlock Grid.Column="2" Text="● ONLINE" FontSize="14" Foreground="#00CC66"
                      VerticalAlignment="Center" IsVisible="{Binding IsOnline}" />
-          <TextBlock Grid.Column="2" Text="◌ RECONNECTING" FontSize="12" Foreground="#D9A020"
+          <TextBlock Grid.Column="2" Text="◌ RECONNECTING" FontSize="14" Foreground="#D9A020"
                      VerticalAlignment="Center" IsVisible="{Binding IsReconnecting}" />
-          <TextBlock Grid.Column="2" Text="○ OFFLINE" FontSize="12" Foreground="#E05050"
+          <TextBlock Grid.Column="2" Text="○ OFFLINE" FontSize="14" Foreground="#E05050"
                      VerticalAlignment="Center" IsVisible="{Binding IsOffline}" />
 
-          <!-- Search -->
           <Button Grid.Column="3"
-                  Content="[SEARCH]"
-                  Command="{Binding ToggleGlobalSearchCommand}"
-                  Background="Transparent" Padding="8,4"
-                  ToolTip.Tip="Search messages (Ctrl+F)" />
-
-          <Button Grid.Column="4"
                   Content="[ REFRESH ]"
                   Command="{Binding RefreshCommand}"
-                  Background="Transparent" Padding="8,4"
+                  Background="Transparent"
+                  Padding="8,4"
+                  FontSize="14"
+                  VerticalAlignment="Center"
                   ToolTip.Tip="Refresh" />
 
-          <TextBlock Grid.Column="5"
+          <TextBlock Grid.Column="4"
                      Text="{Binding CurrentUsername}"
                      IsVisible="{Binding HasCurrentUsername}"
-                     FontSize="13" FontWeight="Bold"
+                     FontSize="14" FontWeight="Bold"
                      Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                      VerticalAlignment="Center" />
         </Grid>
       </Border>
 
-      <!-- Row 1: Offline banner -->
+      
       <Border Grid.Row="1"
               Background="#191200"
               BorderBrush="#282000"
@@ -139,32 +169,32 @@
         </Grid>
       </Border>
 
-      <!-- Row 2: Two-column layout: sidebar | chat -->
+      
       <Grid Grid.Row="2" ColumnDefinitions="262,*">
 
-        <!-- Sidebar with right border acting as divider -->
+        
         <Border Grid.Column="0"
                 BorderBrush="#1E1E1E"
                 BorderThickness="0,0,1,0">
           <views:ChatListView DataContext="{Binding ChatList}" />
         </Border>
 
-        <!-- Right panel -->
+        
         <Grid Grid.Column="1" RowDefinitions="*,Auto">
 
-          <!-- Empty state -->
+          
           <Border Grid.Row="0" Background="Transparent" IsVisible="{Binding NoChatSelected}">
             <TextBlock Text="select a conversation to start messaging"
                        FontSize="12" Foreground="#333333"
                        HorizontalAlignment="Center" VerticalAlignment="Center" />
           </Border>
 
-          <!-- Chat window -->
+          
           <Panel Grid.Row="0" IsVisible="{Binding !NoChatSelected}">
             <views:ChatWindowView DataContext="{Binding ChatWindow}" />
           </Panel>
 
-          <!-- Message input with top border separator -->
+          
           <Border Grid.Row="1"
                   IsVisible="{Binding !NoChatSelected}"
                   BorderBrush="#1E1E1E"
@@ -176,9 +206,7 @@
       </Grid>
     </Grid>
 
-    <!-- ═══════════════════════════════════════════════════════════
-         FATAL ERROR OVERLAY  (STAB-01 — survives unhandled exceptions)
-    ═══════════════════════════════════════════════════════════════ -->
+    
     <Grid IsVisible="{Binding IsShowingDebugError}"
           Background="#CC000000"
           ZIndex="200">
@@ -188,7 +216,7 @@
               Padding="0">
         <Grid RowDefinitions="Auto,*,Auto">
 
-          <!-- Title bar -->
+          
           <Border Grid.Row="0"
                   Background="#1A0505"
                   BorderBrush="#E05050" BorderThickness="0,0,0,1"
@@ -207,7 +235,7 @@
             </Grid>
           </Border>
 
-          <!-- Scrollable error detail -->
+          
           <ScrollViewer Grid.Row="1" MaxHeight="420" Padding="14,10">
             <TextBlock Text="{Binding DebugErrorText}"
                        FontSize="11"
@@ -216,7 +244,7 @@
                        TextWrapping="Wrap" />
           </ScrollViewer>
 
-          <!-- Footer -->
+          
           <Border Grid.Row="2"
                   Background="#0A0A0A"
                   BorderBrush="#2A2A2A" BorderThickness="0,1,0,0"

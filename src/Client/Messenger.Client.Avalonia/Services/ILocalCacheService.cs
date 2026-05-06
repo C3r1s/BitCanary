@@ -1,3 +1,4 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «ILocalCacheService».
 namespace Messenger.Client.Avalonia.Services;
 
 public interface ILocalCacheService

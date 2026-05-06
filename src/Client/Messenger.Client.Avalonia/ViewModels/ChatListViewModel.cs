@@ -1,3 +1,4 @@
+// Состояние и команды UI BitCanary для «ChatListViewModel».
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -24,22 +25,79 @@ public sealed partial class ChatListViewModel : ViewModelBase
     [ObservableProperty]
     private bool _isGroupCreationMode;
 
-    /// <summary>Set by MainWindowViewModel during construction to wire up global search.</summary>
     [ObservableProperty]
     private SearchViewModel? _search;
 
-    /// <summary>Set by MainWindowViewModel during construction to wire up user-directory search.</summary>
     public UserSearchViewModel? UserSearch { get; set; }
 
-    /// <summary>Set by MainWindowViewModel during construction to wire up group creation.</summary>
     public GroupCreationViewModel? GroupCreation { get; set; }
 
-    /// <summary>True when no search or creation mode is active.</summary>
     public bool IsInNormalMode => !IsSearchMode && !IsUserSearchMode && !IsGroupCreationMode;
 
-    partial void OnIsSearchModeChanged(bool _) => OnPropertyChanged(nameof(IsInNormalMode));
-    partial void OnIsUserSearchModeChanged(bool _) => OnPropertyChanged(nameof(IsInNormalMode));
-    partial void OnIsGroupCreationModeChanged(bool _) => OnPropertyChanged(nameof(IsInNormalMode));
+    private bool _suppressModeReentry;
+
+    partial void OnIsSearchModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsInNormalMode));
+        if (!value || _suppressModeReentry) return;
+        _suppressModeReentry = true;
+        try
+        {
+            if (IsUserSearchMode)
+            {
+                IsUserSearchMode = false;
+                UserSearch?.Reset();
+            }
+            if (IsGroupCreationMode)
+            {
+                IsGroupCreationMode = false;
+                GroupCreation?.Reset();
+            }
+        }
+        finally { _suppressModeReentry = false; }
+    }
+
+    partial void OnIsUserSearchModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsInNormalMode));
+        if (!value || _suppressModeReentry) return;
+        _suppressModeReentry = true;
+        try
+        {
+            if (IsSearchMode)
+            {
+                IsSearchMode = false;
+                Search?.Reset();
+            }
+            if (IsGroupCreationMode)
+            {
+                IsGroupCreationMode = false;
+                GroupCreation?.Reset();
+            }
+        }
+        finally { _suppressModeReentry = false; }
+    }
+
+    partial void OnIsGroupCreationModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(IsInNormalMode));
+        if (!value || _suppressModeReentry) return;
+        _suppressModeReentry = true;
+        try
+        {
+            if (IsSearchMode)
+            {
+                IsSearchMode = false;
+                Search?.Reset();
+            }
+            if (IsUserSearchMode)
+            {
+                IsUserSearchMode = false;
+                UserSearch?.Reset();
+            }
+        }
+        finally { _suppressModeReentry = false; }
+    }
 
     public ObservableCollection<ChatListItemViewModel> Chats { get; } = new();
 
@@ -66,7 +124,6 @@ public sealed partial class ChatListViewModel : ViewModelBase
                 IsUserSearchMode = false;   // mutual exclusion per Pitfall 3
                 UserSearch?.Reset();
                 IsSearchMode = true;
-                // View code-behind focuses search box when IsSearchMode becomes true
             }
         });
         ToggleUserSearchCommand = new RelayCommand(() =>

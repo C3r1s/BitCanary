@@ -1,4 +1,6 @@
+// Преобразование сущностей EF в DTO для контрактов клиента.
 using Messenger.Domain.Entities;
+using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
 
 namespace Messenger.Application.Common;
@@ -16,7 +18,14 @@ public static class MappingExtensions
             user.PublicKey);
 
     public static UserSettingsDto ToDto(this UserSettings settings) =>
-        new(settings.ThemePreference, settings.SendByEnter, settings.UseCompactMode, settings.EnableCustomEmoji);
+        new(
+            settings.ThemePreference,
+            settings.SendByEnter,
+            settings.UseCompactMode,
+            settings.EnableCustomEmoji,
+            settings.ShowNotifications,
+            settings.ShowSenderName,
+            settings.TerminalColorScheme);
 
     public static ChatMemberDto ToDto(this ChatMembership membership) =>
         new(
@@ -26,7 +35,7 @@ public static class MappingExtensions
             membership.Role,
             membership.JoinedAtUtc);
 
-    public static MessageDto ToDto(this Message message) =>
+    public static MessageDto ToDto(this Message message, MessageStatus status = MessageStatus.Delivered) =>
         new(
             message.Id,
             message.ChatId,
@@ -40,7 +49,8 @@ public static class MappingExtensions
             message.ReplyToMessageId,
             message.MetadataJson,
             message.CreatedAtUtc,
-            message.ProtocolVersion);
+            message.ProtocolVersion,
+            status);
 
     public static ChatSummaryDto ToDto(this Chat chat, MessageDto? lastMessage, int unreadCount) =>
         new(

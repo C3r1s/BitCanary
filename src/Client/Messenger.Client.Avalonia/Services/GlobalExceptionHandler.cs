@@ -1,3 +1,4 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «GlobalExceptionHandler».
 using System;
 using System.IO;
 using System.Threading.Tasks;
@@ -9,9 +10,8 @@ namespace Messenger.Client.Avalonia.Services;
 
 public static class GlobalExceptionHandler
 {
-    private static readonly string LogFilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Messenger.Client.Avalonia", "app.log");
+    private const string LogDirectoryPath = @"E:\Programming\CsharpProj\BitCanary\storage\logs";
+    private static readonly string LogFilePath = Path.Combine(LogDirectoryPath, "desktop-app.log");
 
     public static void RegisterProcessLevelHandlers()
     {

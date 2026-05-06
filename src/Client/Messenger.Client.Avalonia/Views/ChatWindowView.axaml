@@ -1,3 +1,4 @@
+<!-- Разметка экрана BitCanary «ChatWindowView»: поля, списки и панели (Avalonia). -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
@@ -6,7 +7,7 @@
              x:DataType="vm:ChatWindowViewModel">
   <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto,*">
 
-    <!-- Row 0: Find bar (collapsible) -->
+    
     <Border Grid.Row="0"
             IsVisible="{Binding IsFindBarVisible}"
             Background="#0C160C"
@@ -31,7 +32,7 @@
       </Grid>
     </Border>
 
-    <!-- Row 1: Chat header -->
+    
     <Border Grid.Row="1"
             Background="#0D0D0D"
             BorderBrush="#1E1E1E"
@@ -43,68 +44,95 @@
                      FontSize="14" FontWeight="Bold"
                      Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
           <TextBlock Text="{Binding Subtitle}"
-                     FontSize="11" Foreground="#505050" />
+                     FontSize="14" Foreground="#505050" />
         </StackPanel>
         <StackPanel Grid.Column="1"
                     Orientation="Horizontal"
                     Spacing="8"
                     VerticalAlignment="Center">
 
-          <!-- [ INFO ] button — group chats only -->
+          
           <Button Content="[ INFO ]"
                   Command="{Binding ShowGroupInfoCommand}"
                   IsVisible="{Binding IsGroupChat}"
                   Background="Transparent"
                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
-                  Padding="6,3" FontSize="11" />
+                  Padding="8,0"
+                  Height="28"
+                  MinHeight="28"
+                  HorizontalContentAlignment="Center"
+                  VerticalContentAlignment="Center"
+                  FontSize="14" />
 
-          <!-- Safety Number pill -->
-          <Button Background="Transparent" Padding="0"
+          
+          <Button Background="Transparent"
+                  Padding="0"
+                  MinWidth="0"
+                  MinHeight="28"
+                  Height="28"
+                  BorderThickness="0"
+                  CornerRadius="0"
+                  VerticalAlignment="Center"
+                  IsVisible="{Binding IsDirectChat}"
                   Command="{Binding ShowSafetyNumberCommand}">
-            <Border Padding="7,3" BorderBrush="#2A2A2A" BorderThickness="1">
-              <TextBlock Text="[safety#]" FontSize="11" Foreground="#505050" />
+            <Border Height="28"
+                    Padding="8,0"
+                    BorderBrush="#2A2A2A"
+                    BorderThickness="1">
+              <TextBlock Text="[safety#]"
+                         FontSize="14"
+                         Foreground="#505050"
+                         VerticalAlignment="Center" />
             </Border>
           </Button>
 
-          <!-- Unverified badge — shown when chat contains plaintext messages (FEA-03) -->
-          <Border Padding="7,3"
+          
+          <Border Height="28"
+                  Padding="8,0"
                   Background="#1C0808"
                   BorderBrush="#E05050"
                   BorderThickness="1"
+                  VerticalAlignment="Center"
                   IsVisible="{Binding ShowUnverifiedBadge}">
-            <TextBlock Text="! UNVERIFIED" FontSize="11" Foreground="#E05050" />
+            <TextBlock Text="! UNVERIFIED"
+                       FontSize="14"
+                       Foreground="#E05050"
+                       VerticalAlignment="Center" />
           </Border>
 
-          <!-- Verified badge -->
-          <Border Padding="7,3"
+          
+          <Border Height="28"
+                  Padding="8,0"
                   Background="#003D2A"
                   BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
                   BorderThickness="1"
-                  IsVisible="{Binding IsSessionVerified}">
+                  VerticalAlignment="Center"
+                  IsVisible="{Binding ShowVerifiedBadge}">
             <TextBlock Text="✓ VERIFIED"
-                       FontSize="11"
-                       Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
+                       FontSize="14"
+                       Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
+                       VerticalAlignment="Center" />
           </Border>
 
         </StackPanel>
       </Grid>
     </Border>
 
-    <!-- Row 2: Typing status -->
+    
     <Border Grid.Row="2"
             Padding="14,4"
             IsVisible="{Binding TypingStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
       <TextBlock Text="{Binding TypingStatus}"
-                 FontSize="11" Foreground="#404040"
+                 FontSize="14" Foreground="#404040"
                  FontStyle="Italic" />
     </Border>
 
-    <!-- Row 3: Messages -->
+    
     <Panel Grid.Row="3">
 
-      <!-- Empty state -->
+      
       <TextBlock Text="no messages yet. say hello!"
-                 FontSize="12" Foreground="#303030"
+                 FontSize="14" Foreground="#303030"
                  HorizontalAlignment="Center"
                  VerticalAlignment="Center"
                  IsVisible="{Binding HasNoMessages}" />
@@ -112,61 +140,83 @@
       <ScrollViewer Name="MessagesScroll"
                     IsVisible="{Binding !HasNoMessages}"
                     Padding="0,4,0,4">
-        <ItemsControl ItemsSource="{Binding Messages}">
+        <ItemsControl ItemsSource="{Binding Messages}"
+                      Margin="0,0,0,30">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:MessageItemViewModel">
               <Panel>
 
-                <!-- IRC-format message row -->
+                
                 <Border Classes="message-bubble"
                         Classes.outgoing="{Binding IsOutgoing}"
                         Classes.highlighted="{Binding IsHighlighted}"
                         IsVisible="{Binding !IsSystemBanner}"
                         Padding="14,2">
-                  <Grid ColumnDefinitions="50,100,*,Auto" ColumnSpacing="6">
+                  <Grid ColumnDefinitions="62,120,*,Auto" ColumnSpacing="6">
 
-                    <!-- [HH:MM] timestamp -->
+                    
                     <TextBlock Grid.Column="0"
                                Text="{Binding Timestamp}"
-                               FontSize="11" Foreground="#353535"
+                               FontSize="14" Foreground="#353535"
                                VerticalAlignment="Top" />
 
-                    <!-- sender name (right-aligned, like IRC) -->
+                    
                     <TextBlock Grid.Column="1"
                                Text="{Binding SenderDisplayName}"
-                               FontSize="12"
+                               FontSize="14"
                                Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                                Classes.sender-outgoing="{Binding IsOutgoing}"
                                TextTrimming="CharacterEllipsis"
                                TextAlignment="Right"
                                VerticalAlignment="Top" />
 
-                    <!-- message text -->
-                    <TextBlock Grid.Column="2"
-                               Text="{Binding DisplayText}"
-                               FontSize="13"
-                               TextWrapping="Wrap"
-                               VerticalAlignment="Top" />
+                    
+                    <StackPanel Grid.Column="2"
+                                Orientation="Vertical"
+                                Spacing="6"
+                                VerticalAlignment="Top"
+                                HorizontalAlignment="Left">
+                      <Image Source="{Binding InlineImage}"
+                             MaxWidth="320"
+                             MaxHeight="260"
+                             Stretch="Uniform"
+                             IsVisible="{Binding HasInlineImage}" />
+                      <StackPanel Orientation="Horizontal"
+                                  Spacing="6"
+                                  VerticalAlignment="Top"
+                                  IsVisible="{Binding ShowTextGlyphRow}">
+                        <TextBlock Text="{Binding DisplayText}"
+                                   FontSize="14"
+                                   TextWrapping="Wrap"
+                                   VerticalAlignment="Top"
+                                   IsVisible="{Binding CaptionVisible}" />
+                        <TextBlock Text="{Binding EncryptionGlyph}"
+                                   FontSize="14"
+                                   Foreground="#606060"
+                                   VerticalAlignment="Top"
+                                   IsVisible="{Binding ShowEncryptionGlyph}" />
+                      </StackPanel>
+                    </StackPanel>
 
-                    <!-- delivery status glyph + retry button -->
+                    
                     <StackPanel Grid.Column="3"
                                 Orientation="Vertical"
                                 Spacing="4"
                                 IsVisible="{Binding IsOutgoing}"
                                 VerticalAlignment="Top">
-                      <!-- Normal status glyph (not failed) -->
+                      
                       <TextBlock Text="{Binding StatusGlyph}"
-                                 FontSize="11"
+                                 FontSize="14"
                                  Foreground="#353535"
                                  IsVisible="{Binding !IsFailedOutgoing}" />
-                      <!-- Failed status glyph (red ⚠) -->
+                      
                       <TextBlock Text="{Binding StatusGlyph}"
-                                 FontSize="11"
+                                 FontSize="14"
                                  Foreground="#E05050"
                                  IsVisible="{Binding IsFailedOutgoing}" />
-                      <!-- Retry button — visible only on outgoing failed messages -->
+                      
                       <Button Content="Retry"
-                              FontSize="11"
+                              FontSize="14"
                               Foreground="#E05050"
                               Background="Transparent"
                               BorderBrush="#E05050"
@@ -175,13 +225,13 @@
                               MinWidth="44"
                               MinHeight="20"
                               VerticalAlignment="Top"
-                              IsVisible="{Binding IsFailedOutgoing}"
+                              IsVisible="{Binding ShowRetryButton}"
                               Command="{Binding RetryCommand}" />
                     </StackPanel>
                   </Grid>
                 </Border>
 
-                <!-- System banner -->
+                
                 <Border Background="#1C0808"
                         BorderBrush="#E05050"
                         BorderThickness="1"
@@ -221,7 +271,7 @@
       </ScrollViewer>
     </Panel>
 
-    <!-- Column 1: Group info panel (right side, all rows) -->
+    
     <Border Grid.Column="1"
             Grid.RowSpan="4"
             IsVisible="{Binding IsGroupInfoVisible}"

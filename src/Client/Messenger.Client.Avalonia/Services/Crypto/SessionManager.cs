@@ -1,32 +1,20 @@
+// Клиентское E2E: «SessionManager» (сессии, ключи, ratchet).
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 
 namespace Messenger.Client.Avalonia.Services.Crypto;
 
-/// <summary>
-/// Thread-safe Double Ratchet session lifecycle manager.
-///
-/// Each session is protected by a dedicated SemaphoreSlim(1,1) to prevent
-/// concurrent ratchet advances. State is persisted to SQLite WAL after
-/// every encrypt and decrypt operation (D-11, D-12).
-/// </summary>
 public sealed class SessionManager(
     IDoubleRatchetService ratchet,
     IRatchetSessionRepository repo) : ISessionManager
 {
     private const int MaxSkippedKeys = 2000;
 
-    // Per-session concurrency locks (D-12)
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _sessionLocks = new();
 
-    // In-memory cache: avoids a SQLite round-trip on every message
     private readonly ConcurrentDictionary<string, RatchetState> _stateCache = new();
 
-    // -------------------------------------------------------------------------
-    // ISessionManager implementation
-    // -------------------------------------------------------------------------
 
-    /// <inheritdoc/>
     public async Task<RatchetState?> GetSessionAsync(string sessionId, CancellationToken ct = default)
     {
         if (_stateCache.TryGetValue(sessionId, out var cached))
@@ -41,7 +29,6 @@ public sealed class SessionManager(
         return state;
     }
 
-    /// <inheritdoc/>
     public async Task SaveSessionAsync(RatchetState state, CancellationToken ct = default)
     {
         var blob = state.Serialize();
@@ -49,7 +36,21 @@ public sealed class SessionManager(
         _stateCache[state.SessionId] = state;
     }
 
-    /// <inheritdoc/>
+    public async Task ResetSessionAsync(string sessionId, CancellationToken ct = default)
+    {
+        var sem = _sessionLocks.GetOrAdd(sessionId, _ => new SemaphoreSlim(1, 1));
+        await sem.WaitAsync(ct);
+        try
+        {
+            await repo.DeleteSessionAsync(sessionId, ct);
+            _stateCache.TryRemove(sessionId, out _);
+        }
+        finally
+        {
+            sem.Release();
+        }
+    }
+
     public async Task<(byte[] Ciphertext, byte[] RatchetPublic, int Pn, int N)> EncryptAsync(
         string sessionId,
         byte[] plaintext,
@@ -74,7 +75,6 @@ public sealed class SessionManager(
         }
     }
 
-    /// <inheritdoc/>
     public async Task<byte[]> DecryptAsync(
         string sessionId,
         byte[] ciphertext,
@@ -91,8 +91,6 @@ public sealed class SessionManager(
             var state = await GetSessionAsync(sessionId, ct)
                 ?? throw new CryptographicException($"Session '{sessionId}' not found.");
 
-            // Skipped key delegates — use sync-over-async inside the semaphore
-            // (acceptable because the semaphore serializes all access to this session)
             byte[]? TryConsumeSkippedKey(byte[] rpk, int mn) =>
                 repo.TryConsumeSkippedKeyAsync(sessionId, rpk, mn, ct).GetAwaiter().GetResult();
 
@@ -114,7 +112,6 @@ public sealed class SessionManager(
         }
     }
 
-    /// <inheritdoc/>
     public async Task CreateInitiatorSessionAsync(
         string sessionId,
         byte[] sharedSecret,
@@ -126,7 +123,6 @@ public sealed class SessionManager(
         await SaveSessionAsync(state, ct);
     }
 
-    /// <inheritdoc/>
     public async Task CreateResponderSessionAsync(
         string sessionId,
         byte[] sharedSecret,

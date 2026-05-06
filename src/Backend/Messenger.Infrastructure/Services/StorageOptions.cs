@@ -1,3 +1,4 @@
+// Параметры каталога хранения медиафайлов BitCanary.
 namespace Messenger.Infrastructure.Services;
 
 public sealed class StorageOptions

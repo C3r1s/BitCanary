@@ -1,3 +1,4 @@
+<!-- Разметка экрана BitCanary «LoginView»: поля, списки и панели (Avalonia). -->
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Messenger.Client.Avalonia.ViewModels"
@@ -7,7 +8,7 @@
   <Grid VerticalAlignment="Center" HorizontalAlignment="Center">
     <StackPanel Width="400" Spacing="0">
 
-      <!-- Header block -->
+      
       <Border BorderBrush="#1E1E1E" BorderThickness="1,1,1,0"
               Padding="28,22" Background="#0D0D0D">
         <StackPanel Spacing="6" HorizontalAlignment="Center">
@@ -17,93 +18,99 @@
                      Foreground="{DynamicResource SystemControlHighlightAccentBrush}" />
           <TextBlock Text="end-to-end encrypted · signal protocol"
                      HorizontalAlignment="Center"
-                     Foreground="#404040" FontSize="11" />
+                     Foreground="#404040" FontSize="14" />
         </StackPanel>
       </Border>
 
-      <!-- Form block -->
+      
       <Border BorderBrush="#1E1E1E" BorderThickness="1"
               Padding="28,22" Background="#111111">
         <StackPanel Spacing="16">
 
-          <!-- Username -->
+          
           <StackPanel Spacing="4">
-            <TextBlock Text="username:" Foreground="#505050" FontSize="11" />
-            <TextBox Text="{Binding UserName, Mode=TwoWay}" />
+            <TextBlock Text="username:" Foreground="#505050" FontSize="14" />
+            <TextBox Text="{Binding UserName, Mode=TwoWay}" FontSize="14" />
           </StackPanel>
 
-          <!-- Display name (register only) -->
+          
           <StackPanel Spacing="4" IsVisible="{Binding IsRegistering}">
-            <TextBlock Text="display name:" Foreground="#505050" FontSize="11" />
-            <TextBox Text="{Binding DisplayName, Mode=TwoWay}" />
+            <TextBlock Text="display name:" Foreground="#505050" FontSize="14" />
+            <TextBox Text="{Binding DisplayName, Mode=TwoWay}" FontSize="14" />
           </StackPanel>
 
-          <!-- Password -->
+          
           <StackPanel Spacing="4">
-            <TextBlock Text="password:" Foreground="#505050" FontSize="11" />
-            <TextBox PasswordChar="●" Text="{Binding Password, Mode=TwoWay}" />
+            <TextBlock Text="password:" Foreground="#505050" FontSize="14" />
+            <TextBox PasswordChar="●" Text="{Binding Password, Mode=TwoWay}" FontSize="14" />
           </StackPanel>
 
-          <!-- Error banner -->
+          
           <Border Background="#1C0808" BorderBrush="#E05050" BorderThickness="1" Padding="10,7"
                   IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
             <TextBlock Text="{Binding ErrorMessage}"
-                       Foreground="#E05050" TextWrapping="Wrap" FontSize="12" />
+                       Foreground="#E05050" TextWrapping="Wrap" FontSize="14" />
           </Border>
 
-          <!-- Sign in button -->
+          
           <Button Content="[ SIGN IN ]"
                   IsVisible="{Binding !IsRegistering}"
                   Command="{Binding SubmitCommand}"
                   HorizontalAlignment="Stretch"
                   HorizontalContentAlignment="Center"
+                  VerticalContentAlignment="Center"
                   IsEnabled="{Binding !IsBusy}"
                   MinHeight="38"
+                  FontSize="14"
                   Background="#003D2A"
                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                   BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
                   BorderThickness="1" />
 
-          <!-- Create account button -->
+          
           <Button Content="[ CREATE ACCOUNT ]"
                   IsVisible="{Binding IsRegistering}"
                   Command="{Binding SubmitCommand}"
                   HorizontalAlignment="Stretch"
                   HorizontalContentAlignment="Center"
+                  VerticalContentAlignment="Center"
                   IsEnabled="{Binding !IsBusy}"
                   MinHeight="38"
+                  FontSize="14"
                   Background="#003D2A"
                   Foreground="{DynamicResource SystemControlHighlightAccentBrush}"
                   BorderBrush="{DynamicResource SystemControlHighlightAccentBrush}"
                   BorderThickness="1" />
 
-          <!-- Toggle mode links -->
+          
           <Button IsVisible="{Binding !IsRegistering}"
                   Command="{Binding ToggleModeCommand}"
                   HorizontalAlignment="Stretch"
                   HorizontalContentAlignment="Center"
+                  VerticalContentAlignment="Center"
                   MinHeight="30"
                   Background="Transparent"
                   Foreground="#505050"
                   BorderThickness="0">
-            <TextBlock Text="no account? register →" FontSize="12" />
+            <TextBlock Text="no account? register →" FontSize="14" />
           </Button>
 
           <Button IsVisible="{Binding IsRegistering}"
                   Command="{Binding ToggleModeCommand}"
                   HorizontalAlignment="Stretch"
                   HorizontalContentAlignment="Center"
+                  VerticalContentAlignment="Center"
                   MinHeight="30"
                   Background="Transparent"
                   Foreground="#505050"
                   BorderThickness="0">
-            <TextBlock Text="already registered? sign in →" FontSize="12" />
+            <TextBlock Text="already registered? sign in →" FontSize="14" />
           </Button>
 
-          <!-- Busy indicator -->
+          
           <TextBlock Text="please wait..."
                      HorizontalAlignment="Center"
-                     Foreground="#505050" FontSize="12"
+                     Foreground="#505050" FontSize="14"
                      IsVisible="{Binding IsBusy}" />
 
         </StackPanel>

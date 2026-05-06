@@ -1,3 +1,4 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «IClientSessionService».
 namespace Messenger.Client.Avalonia.Services;
 
 public interface IClientSessionService
@@ -8,9 +9,7 @@ public interface IClientSessionService
     string UserName { get; }
     bool IsAuthenticated { get; }
 
-    /// <summary>Persist session data after a successful login.</summary>
     void SetSession(Guid userId, string userName, string accessToken);
 
-    /// <summary>Wipe the in-memory and on-disk session (logout).</summary>
     void ClearSession();
 }

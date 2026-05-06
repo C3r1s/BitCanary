@@ -1,3 +1,4 @@
+// Команда отправки сообщения: дедупликация, валидация и рассылка в SignalR.
 using System.Net;
 using Messenger.Application.Abstractions;
 using Messenger.Application.Common;
@@ -90,6 +91,7 @@ public sealed class SendMessageCommandHandler(
 
         var dto = savedMessage.ToDto();
         await realtimeNotifier.BroadcastMessageAsync(dto, cancellationToken);
+        await realtimeNotifier.SendMessageDeliveredAsync(dto.Id, dto.SenderId, cancellationToken);
 
         return dto;
     }

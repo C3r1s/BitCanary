@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «RateLimiterTests».
 using System.Net;
 using System.Net.Http.Json;
 using Messenger.Api.Controllers;
@@ -41,8 +42,6 @@ public sealed class RateLimiterTests
                 {
                     services.AddMessengerApi(config, ctx.HostingEnvironment);
 
-                    // Replace IAuthService with a stub so the controller action
-                    // doesn't hit a real database.
                     var stub = Substitute.For<IAuthService>();
                     var fakeResponse = new AuthResponse(
                         Guid.NewGuid(),
@@ -55,7 +54,6 @@ public sealed class RateLimiterTests
                         .Returns(fakeResponse);
                     services.AddSingleton(stub);
 
-                    // Ensure AuthController is discovered in the custom test host.
                     services.AddControllers()
                         .AddApplicationPart(typeof(AuthController).Assembly);
                 });

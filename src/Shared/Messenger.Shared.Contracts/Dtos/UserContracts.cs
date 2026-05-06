@@ -1,3 +1,4 @@
+// DTO передачи «UserContracts» между API BitCanary и клиентами.
 namespace Messenger.Shared.Contracts.Dtos;
 
 public sealed record UserProfileDto(
@@ -21,7 +22,8 @@ public sealed record UserSettingsDto(
     bool UseCompactMode,
     bool EnableCustomEmoji,
     bool ShowNotifications = true,
-    bool ShowSenderName = true);
+    bool ShowSenderName = true,
+    TerminalColorScheme TerminalColorScheme = TerminalColorScheme.MatrixGreen);
 
 public sealed record UpdateSettingsRequest(
     ThemePreference ThemePreference,
@@ -29,4 +31,5 @@ public sealed record UpdateSettingsRequest(
     bool UseCompactMode,
     bool EnableCustomEmoji,
     bool ShowNotifications = true,
-    bool ShowSenderName = true);
+    bool ShowSenderName = true,
+    TerminalColorScheme TerminalColorScheme = TerminalColorScheme.MatrixGreen);

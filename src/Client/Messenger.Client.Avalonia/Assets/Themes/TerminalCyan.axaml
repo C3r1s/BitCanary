@@ -1,10 +1,11 @@
+<!-- Терминальная цветовая тема BitCanary «TerminalCyan». -->
 <ResourceDictionary xmlns="https://github.com/avaloniaui"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <!-- Sentinel key used by ThemeService to identify and remove terminal dictionaries -->
+  
   <x:Boolean x:Key="IsTerminalTheme">True</x:Boolean>
 
-  <!-- Cyberpunk cyan color scheme -->
-  <!-- Background / surface colors -->
+  
+  
   <Color x:Key="TerminalBackgroundColor">#050510</Color>
   <Color x:Key="TerminalSurfaceColor">#0A0A1A</Color>
   <Color x:Key="TerminalTextColor">#7DF9FF</Color>
@@ -17,10 +18,10 @@
   <SolidColorBrush x:Key="SystemControlForegroundBaseMediumBrush" Color="#00BFFF" />
   <SolidColorBrush x:Key="SystemControlForegroundBaseLowBrush" Color="#005F7F" />
 
-  <!-- Application background -->
+  
   <SolidColorBrush x:Key="ApplicationPageBackgroundThemeBrush" Color="#050510" />
   <SolidColorBrush x:Key="SystemControlAcrylicWindowBrush" Color="#050510" />
 
-  <!-- Monospace font -->
-  <FontFamily x:Key="ContentControlThemeFontFamily">Fixedsys, Terminal, Lucida Console, Courier New, monospace</FontFamily>
+  
+  <FontFamily x:Key="ContentControlThemeFontFamily">Consolas, JetBrains Mono, Courier New, monospace</FontFamily>
 </ResourceDictionary>

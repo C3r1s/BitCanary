@@ -1,3 +1,4 @@
+// Регистрация зависимостей Avalonia-клиента BitCanary в DI.
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -28,7 +29,6 @@ public static class ServiceCollectionExtensions
 
         services.AddLogging();
 
-        // ── Core services ──────────────────────────────────────────────────
         services.AddSingleton<IKeyStore, DpapiKeyStore>();
         services.AddSingleton<IClientSessionService, ClientSessionService>();
         services.AddSingleton<ILocalCacheService, LocalCacheService>();
@@ -36,13 +36,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IMessengerApiClient, MessengerApiClient>();
         services.AddSingleton<IRealtimeClient, RealtimeClient>();
 
-        // ── Storage ────────────────────────────────────────────────────────
         services.AddSingleton<DatabaseService>();
         services.AddSingleton<SqliteConnection>(sp =>
         {
             var dbService = sp.GetRequiredService<DatabaseService>();
-            // Task.Run escapes the Avalonia SynchronizationContext so File I/O inside
-            // OpenAsync doesn't deadlock when resolved lazily on the UI thread.
             return Task.Run(() => dbService.OpenAsync(cancellationToken: CancellationToken.None))
                        .GetAwaiter().GetResult();
         });
@@ -57,9 +54,9 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IRatchetSessionRepository>(sp =>
             new RatchetSessionRepository(sp.GetRequiredService<SqliteConnection>()));
 
-        // ── Crypto services ────────────────────────────────────────────────
         services.AddSingleton<IIdentityKeyChangeDetector, IdentityKeyChangeDetector>();
         services.AddSingleton<ISafetyNumberService, SafetyNumberService>();
+        services.AddSingleton<IChatSafetyNumberStore, ChatSafetyNumberStore>();
         services.AddSingleton<IX3DHService, X3DHService>();
         services.AddSingleton<IDoubleRatchetService, DoubleRatchetService>();
         services.AddSingleton<ISessionManager, SessionManager>();
@@ -67,7 +64,6 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<KeyPublicationService>();
         services.AddSingleton<IEncryptionService, SignalProtocolEncryptionService>();
 
-        // ── Notification service ───────────────────────────────────────────────────
         services.AddSingleton<INotificationService>(sp =>
         {
             var session = sp.GetRequiredService<IClientSessionService>();
@@ -96,10 +92,8 @@ public static class ServiceCollectionExtensions
                 });
         });
 
-        // ── Migration ──────────────────────────────────────────────────────
         services.AddSingleton<StartupMigrationService>();
 
-        // ── ViewModels ─────────────────────────────────────────────────────
         services.AddSingleton<MainWindowViewModel>();
 
         return services;

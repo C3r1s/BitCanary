@@ -1,3 +1,4 @@
+// Сопоставление userId ↔ connectionId для личной доставки (звонки, уведомления).
 using System.Collections.Concurrent;
 
 namespace Messenger.Api.Services;

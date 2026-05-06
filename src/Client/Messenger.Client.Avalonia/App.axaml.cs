@@ -1,3 +1,4 @@
+// Запуск Avalonia-приложения, DI-контейнер и инициализация клиента BitCanary.
 using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
@@ -27,20 +28,14 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        // D-02 (CONTEXT.md): Must be first — before any toast API access.
         SetCurrentProcessExplicitAppUserModelID(AppId);
 
-        // <!-- User decision: Using ToastNotificationManagerCompat.OnActivated instead of
-        // NotificationActivator COM class per user confirmation — achieves identical D-03 intent
-        // (chatId parsing + NavigateToChatAsync) without deprecated API -->
-        // Subscribe before window opens (RESEARCH.md Pitfall 2).
         ToastNotificationManagerCompat.OnActivated += toastArgs =>
         {
             var args = ToastArguments.Parse(toastArgs.Argument);
             if (!args.TryGetValue("chatId", out var chatIdStr)) return;
             if (!Guid.TryParse(chatIdStr, out var chatId)) return;
 
-            // OnActivated fires on a background thread — marshal to UI thread (RESEARCH.md Pattern 3).
             Dispatcher.UIThread.Post(() =>
             {
                 var vm = Services.GetRequiredService<MainWindowViewModel>();
@@ -58,12 +53,10 @@ public partial class App : Application
 
             desktop.MainWindow = mainWindow;
 
-            // RunMigration(mainWindowViewModel); // Commented out for debugging
         }
 
         base.OnFrameworkInitializationCompleted();
 
-        // STAB-01: now that the dispatcher exists, hook the UI-thread handler.
         GlobalExceptionHandler.RegisterUiThreadHandler();
     }
 

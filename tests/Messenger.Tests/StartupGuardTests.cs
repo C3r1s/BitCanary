@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «StartupGuardTests».
 using Messenger.Api.Extensions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;

@@ -1,3 +1,4 @@
+// Загрузка и выдача медиафайлов для сообщений BitCanary.
 using Messenger.Application.Abstractions;
 using Messenger.Shared.Contracts.Dtos;
 using Microsoft.AspNetCore.Authorization;
@@ -35,7 +36,6 @@ public sealed class MediaController(IMediaService mediaService) : ControllerBase
     public async Task<IActionResult> Download(Guid mediaId, CancellationToken cancellationToken)
     {
         var result = await mediaService.DownloadAsync(mediaId, cancellationToken);
-        // FileStreamResult disposes the stream after the response is sent
         return File(result.Content, result.ContentType, result.FileName);
     }
 }

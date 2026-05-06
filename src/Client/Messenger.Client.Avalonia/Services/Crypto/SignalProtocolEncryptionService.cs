@@ -1,23 +1,16 @@
+// Клиентское E2E: «SignalProtocolEncryptionService» (сессии, ключи, ratchet).
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Messenger.Client.Avalonia.Models;
 using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
+using Microsoft.Extensions.Logging;
 
 namespace Messenger.Client.Avalonia.Services;
 
-/// <summary>
-/// Primary IEncryptionService implementation using X3DH session establishment
-/// and Double Ratchet per-message encryption (Signal Protocol v1).
-///
-/// Legacy messages (ProtocolVersion.LegacyAes) are delegated to LocalEnvelopeEncryptionService
-/// for backwards-compatible decryption (D-03).
-///
-/// After successful decryption, plaintext is persisted to messages.plaintext_body via
-/// <see cref="ILocalMessageRepository.UpdatePlaintextBodyAsync"/> so the FTS5 search
-/// index stays current (SRCH-01, Phase 05).
-/// </summary>
 public sealed class SignalProtocolEncryptionService(
     Crypto.IX3DHService x3dh,
     Crypto.ISessionManager sessionManager,
@@ -27,59 +20,106 @@ public sealed class SignalProtocolEncryptionService(
     LocalEnvelopeEncryptionService legacyService,
     Crypto.IRatchetSessionRepository sessionRepository,
     Crypto.IIdentityKeyChangeDetector changeDetector,
-    ILocalMessageRepository localMessageRepository) : IEncryptionService
+    ILocalMessageRepository localMessageRepository,
+    ILogger<SignalProtocolEncryptionService> logger) : IEncryptionService
 {
+    private static readonly Regex GuidRegex = new(
+        @"\b[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[1-5][0-9a-fA-F]{3}\-[89abAB][0-9a-fA-F]{3}\-[0-9a-fA-F]{12}\b",
+        RegexOptions.Compiled);
+    private static readonly Regex SessionEnvelopeRegex = new(
+        @"\b[0-9a-fA-F\-]{36}:[0-9a-fA-F\-]{36}\b",
+        RegexOptions.Compiled);
+    private static readonly Regex Base64Regex = new(
+        @"\b[A-Za-z0-9+/]{24,}={0,2}\b",
+        RegexOptions.Compiled);
+    private static readonly Regex SecretFieldRegex = new(
+        @"\b(shared_secret_hash|ik|spk|opk|signature|seed|private|token)\s*=\s*[^ ]+",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static string NormalizeGuid(Guid id) => id.ToString("D").ToLowerInvariant();
+    private static string BuildSessionId(Guid left, Guid right) => $"{NormalizeGuid(left)}:{NormalizeGuid(right)}";
+    private static byte[] BuildAssociatedData(Guid left, Guid right) =>
+        Encoding.UTF8.GetBytes(BuildSessionId(left, right));
+    private static string? NormalizeSessionIdEnvelope(string? keyEnvelope)
+    {
+        if (string.IsNullOrWhiteSpace(keyEnvelope)) return null;
+        var parts = keyEnvelope.Split(':', StringSplitOptions.TrimEntries);
+        if (parts.Length != 2) return null;
+        if (!Guid.TryParse(parts[0], out var left) || !Guid.TryParse(parts[1], out var right)) return null;
+        return BuildSessionId(left, right);
+    }
+    private static bool IsSelfSession(string? sessionId)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)) return false;
+        var parts = sessionId.Split(':', StringSplitOptions.TrimEntries);
+        return parts.Length == 2 && string.Equals(parts[0], parts[1], StringComparison.Ordinal);
+    }
+    private static string ShortHash(byte[] bytes)
+    {
+        var digest = SHA256.HashData(bytes);
+        return Convert.ToHexString(digest.AsSpan(0, 8)).ToLowerInvariant();
+    }
+
+    private void LogCrypto(string stage, string message)
+    {
+        var safeMessage = RedactSensitive(message);
+        logger.LogDebug("SignalCrypto {Stage}: {Message}", stage, safeMessage);
+    }
+
+    private static string RedactSensitive(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message)) return message;
+        var safe = message;
+        safe = SessionEnvelopeRegex.Replace(safe, "[session]");
+        safe = GuidRegex.Replace(safe, "[id]");
+        safe = SecretFieldRegex.Replace(safe, m =>
+        {
+            var field = m.Value.Split('=')[0].Trim();
+            return $"{field}=[redacted]";
+        });
+        safe = Base64Regex.Replace(safe, "[b64]");
+        return safe;
+    }
+
     public async Task<EncryptedMessageDraft> EncryptTextAsync(
         string plaintext, Guid recipientUserId, CancellationToken cancellationToken = default)
     {
-        // 1. Session ID: "{localUserId}:{recipientUserId}" — stable per peer, device-agnostic for v1
-        var sessionId = $"{sessionService.CurrentUserId}:{recipientUserId}";
+        var sessionId = BuildSessionId(sessionService.CurrentUserId, recipientUserId);
+        LogCrypto("encrypt-start",
+            $"session={sessionId} sender={sessionService.CurrentUserId} recipient={recipientUserId} plaintextLen={plaintext.Length}");
 
-        var existingSession = await sessionManager.GetSessionAsync(sessionId, cancellationToken);
-
-        string? x3dhMetadataJson = null;
-
-        if (existingSession is null)
+        JsonElement? noiseElement;
+        var bundle = await apiClient.GetKeyBundleAsync(recipientUserId, cancellationToken);
+        if (bundle is null)
         {
-            // 2. No existing session — fetch bundle and initiate X3DH.
-            //    Bundle is only needed for this initial handshake; subsequent messages
-            //    use the established Double Ratchet session without hitting the key server.
-            var bundle = await apiClient.GetKeyBundleAsync(recipientUserId, cancellationToken);
-            if (bundle is null)
-            {
-                throw new InvalidOperationException(
-                    "Could not establish a secure session. The recipient may not have published encryption keys yet.");
-            }
-
-            // 3. Initiate X3DH
-            var (sharedSecret, x3dhHeader) = x3dh.InitiateSession(
-                keyPublication.LocalBundle,
-                bundle.IkPublic,
-                bundle.SpkPublic,
-                bundle.SpkSignature,
-                bundle.OpkPublic,
-                bundle.OpkId);
-
-            await sessionManager.CreateInitiatorSessionAsync(sessionId, sharedSecret, bundle.SpkPublic, cancellationToken);
-
-            // Build X3DH portion of metadata
-            x3dhMetadataJson = JsonSerializer.Serialize(new
-            {
-                ek_pub = Convert.ToBase64String(x3dhHeader.EkPub),
-                opk_id = x3dhHeader.OpkId?.ToString(),
-                ik_pub = Convert.ToBase64String(x3dhHeader.IkPub)
-            });
+            throw new InvalidOperationException(
+                "Could not establish a secure session. The recipient may not have published encryption keys yet.");
         }
+        var (sharedSecret, noiseHeader) = x3dh.InitiateNoiseSession(
+            keyPublication.LocalBundle,
+            bundle.IkPublic,
+            bundle.SpkPublic,
+            bundle.SpkSignature);
+        LogCrypto("encrypt-noise-bootstrap",
+            $"session={sessionId} remoteBundleSpkLen={bundle.SpkPublic.Length} remoteBundleIkLen={bundle.IkPublic.Length} shared_secret_hash={ShortHash(sharedSecret)}");
+        await sessionManager.CreateInitiatorSessionAsync(sessionId, sharedSecret, bundle.SpkPublic, cancellationToken);
+        noiseElement = JsonSerializer.Deserialize<JsonElement>(JsonSerializer.Serialize(new
+        {
+            e_pub = Convert.ToBase64String(noiseHeader.EphemeralPub),
+            s_pub = Convert.ToBase64String(noiseHeader.StaticPub),
+            sig = Convert.ToBase64String(noiseHeader.Signature)
+        }));
 
-        // 4. Double Ratchet encrypt (uses existing session — no bundle fetch needed here)
-        var associatedData = Encoding.UTF8.GetBytes($"{sessionService.CurrentUserId}:{recipientUserId}");
+        var associatedData = BuildAssociatedData(sessionService.CurrentUserId, recipientUserId);
+        LogCrypto("encrypt-ad-hash", $"session={sessionId} ad_hash={ShortHash(associatedData)}");
         var (ciphertext, ratchetPub, pn, n) = await sessionManager.EncryptAsync(
             sessionId,
             Encoding.UTF8.GetBytes(plaintext),
             associatedData,
             cancellationToken);
+        LogCrypto("encrypt-dr",
+            $"session={sessionId} n={n} pn={pn} ratchetPubLen={ratchetPub.Length} cipherLen={ciphertext.Length} rk_pub_hash={ShortHash(ratchetPub)}");
 
-        // 5. Build metadata JSON
         var drObj = new
         {
             rk_pub = Convert.ToBase64String(ratchetPub),
@@ -87,31 +127,39 @@ public sealed class SignalProtocolEncryptionService(
             n
         };
 
-        string metadataJson;
-        if (x3dhMetadataJson is not null)
+        var metadataJson = JsonSerializer.Serialize(new { noise = noiseElement.Value, dr = drObj });
+        using (var guardDoc = JsonDocument.Parse(metadataJson))
         {
-            metadataJson = JsonSerializer.Serialize(new
+            if (!guardDoc.RootElement.TryGetProperty("noise", out _))
             {
-                x3dh = JsonSerializer.Deserialize<JsonElement>(x3dhMetadataJson),
-                dr = drObj
-            });
-        }
-        else
-        {
-            metadataJson = JsonSerializer.Serialize(new { dr = drObj });
+                LogCrypto("encrypt-runtime-guard-failed", $"session={sessionId} missing noise metadata");
+                throw new CryptographicException("Runtime guard: pv=3 metadata must contain noise bootstrap.");
+            }
         }
 
         return new EncryptedMessageDraft(
             MessageKind.Text,
             Convert.ToBase64String(ciphertext),
-            "signal-protocol-v1",
+            "noise-xx-dr-v1",
             sessionId,
             metadataJson);
     }
 
     public async Task<string> DecryptAsync(MessageDto message, CancellationToken cancellationToken = default)
     {
-        // FEA-03: plaintext fallback — return payload directly, persist for FTS5 search
+        if (message.SenderId == sessionService.CurrentUserId)
+        {
+            var ownPlaintext = await localMessageRepository
+                .GetPlaintextBodyAsync(message.Id, cancellationToken);
+            if (!string.IsNullOrEmpty(ownPlaintext))
+            {
+                LogCrypto("decrypt-own-restored", $"message={message.Id} plaintextLen={ownPlaintext.Length}");
+                return ownPlaintext;
+            }
+            LogCrypto("decrypt-skip-own", $"message={message.Id} sender=self");
+            return "[sent]";
+        }
+
         if (message.ProtocolVersion == ProtocolVersion.Plaintext)
         {
             await localMessageRepository.SaveMessageAsync(message, (int)message.ProtocolVersion, cancellationToken);
@@ -119,11 +167,9 @@ public sealed class SignalProtocolEncryptionService(
             return message.EncryptedPayload;
         }
 
-        // Per D-03: delegate legacy messages to LocalEnvelopeEncryptionService
         if (message.ProtocolVersion == ProtocolVersion.LegacyAes)
         {
             var legacyPlaintext = await legacyService.DecryptAsync(message, cancellationToken);
-            // Persist plaintext for FTS5 search index (legacy path)
             if (!legacyPlaintext.StartsWith("[Unable to decrypt]", StringComparison.Ordinal))
             {
                 await localMessageRepository.SaveMessageAsync(message, (int)message.ProtocolVersion, cancellationToken);
@@ -134,33 +180,47 @@ public sealed class SignalProtocolEncryptionService(
 
         try
         {
+            LogCrypto("decrypt-start",
+                $"message={message.Id} sender={message.SenderId} pv={(int)message.ProtocolVersion} alg={message.EncryptionAlgorithm}");
             if (message.MetadataJson is null)
             {
+                LogCrypto("decrypt", $"message={message.Id} metadataJson is null");
                 return "[Unable to decrypt]";
             }
 
             using var metadata = JsonDocument.Parse(message.MetadataJson);
             var root = metadata.RootElement;
 
-            // Session ID: "{senderId}:{currentUserId}" from receiver's perspective
-            var sessionId = $"{message.SenderId}:{sessionService.CurrentUserId}";
-
-            // If X3DH header present — establish responder session
-            if (root.TryGetProperty("x3dh", out var x3dhElement))
+            var sessionId = BuildSessionId(message.SenderId, sessionService.CurrentUserId);
+            var reverseSessionId = BuildSessionId(sessionService.CurrentUserId, message.SenderId);
+            var envelopeSessionId = NormalizeSessionIdEnvelope(message.KeyEnvelope);
+            var sessionCandidates = new[] { envelopeSessionId, sessionId, reverseSessionId }
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Where(x => !IsSelfSession(x))
+                .Distinct(StringComparer.Ordinal)
+                .ToArray()!;
+            if (sessionCandidates.Length == 0)
             {
-                var ekPub = Convert.FromBase64String(x3dhElement.GetProperty("ek_pub").GetString()!);
-                var ikPub = Convert.FromBase64String(x3dhElement.GetProperty("ik_pub").GetString()!);
+                LogCrypto("decrypt-invalid-session", $"message={message.Id} keyEnvelope={message.KeyEnvelope ?? "n/a"}");
+                return "[Unable to decrypt]";
+            }
 
-                // Identity key change detection (KEY-02)
-                // Must run BEFORE CreateResponderSessionAsync to catch key substitution
+            if (root.TryGetProperty("noise", out var noiseElement))
+            {
+                LogCrypto("decrypt-noise-bootstrap",
+                    $"message={message.Id} sender={message.SenderId} hasNoise=true");
+                var senderBundle = await apiClient.GetKeyBundleAsync(message.SenderId, cancellationToken);
+                if (senderBundle is null)
+                    throw new CryptographicException("Sender bundle is unavailable for Noise verification.");
+
+                var ikPub = senderBundle.IkPublic;
+
                 var verState = await sessionRepository.LoadVerificationStateAsync(sessionId, cancellationToken);
                 if (verState.RemoteIkPublic is not null)
                 {
-                    // Stored IK exists — compare using constant-time equality (Pitfall 6: no SequenceEqual)
                     bool same = CryptographicOperations.FixedTimeEquals(verState.RemoteIkPublic, ikPub);
                     if (!same)
                     {
-                        // Key change detected — reset verification state, store new IK, fire alert
                         await sessionRepository.SaveVerificationStateAsync(
                             sessionId,
                             verified: false,
@@ -169,34 +229,30 @@ public sealed class SignalProtocolEncryptionService(
                             cancellationToken);
                         await changeDetector.RaiseAsync(sessionId, ikPub);
                     }
-                    // Keys match — no action needed (silent)
                 }
                 else
                 {
-                    // First time seeing this peer's IK — store silently, no alert (Pitfall 3)
                     await sessionRepository.SaveVerificationStateAsync(
                         sessionId,
-                        verified: false,
-                        lastVerifiedAt: null,
+                        verified: true,
+                        lastVerifiedAt: DateTimeOffset.UtcNow,
                         remoteIkPublic: ikPub,
                         cancellationToken);
+                    LogCrypto("tofu-verified", $"session={sessionId} first-seen IK auto-verified");
                 }
 
-                Guid? opkId = null;
-                byte[]? otpPrivate = null;
-
-                if (x3dhElement.TryGetProperty("opk_id", out var opkIdElement) &&
-                    opkIdElement.ValueKind != JsonValueKind.Null &&
-                    opkIdElement.GetString() is { } opkIdStr &&
-                    Guid.TryParse(opkIdStr, out var parsedOpkId))
-                {
-                    opkId = parsedOpkId;
-                    var otpPair = keyPublication.FindOtpPrivateKey(parsedOpkId);
-                    otpPrivate = otpPair?.Private;
-                }
-
-                var x3dhHeader = new Crypto.X3dhHeader(ekPub, opkId, ikPub);
-                var sharedSecret = x3dh.RespondToSession(keyPublication.LocalBundle, otpPrivate, x3dhHeader);
+                var noiseHeader = new Crypto.NoiseHeader(
+                    Convert.FromBase64String(noiseElement.GetProperty("e_pub").GetString()!),
+                    Convert.FromBase64String(noiseElement.GetProperty("s_pub").GetString()!),
+                    Convert.FromBase64String(noiseElement.GetProperty("sig").GetString()!));
+                var sharedSecret = x3dh.RespondToNoiseSession(
+                    keyPublication.LocalBundle,
+                    senderBundle.IkPublic,
+                    senderBundle.SpkPublic,
+                    senderBundle.SpkSignature,
+                    noiseHeader);
+                LogCrypto("decrypt-noise-secret",
+                    $"message={message.Id} shared_secret_hash={ShortHash(sharedSecret)}");
 
                 await sessionManager.CreateResponderSessionAsync(
                     sessionId,
@@ -204,30 +260,145 @@ public sealed class SignalProtocolEncryptionService(
                     keyPublication.LocalBundle.SpkPrivate,
                     keyPublication.LocalBundle.SpkPublic,
                     cancellationToken);
+                LogCrypto("decrypt-noise-bootstrap-created", $"message={message.Id} session={sessionId}");
             }
 
-            // Parse DR header
             var drElement = root.GetProperty("dr");
             var ratchetPub = Convert.FromBase64String(drElement.GetProperty("rk_pub").GetString()!);
             var pn = drElement.GetProperty("pn").GetInt32();
             var n = drElement.GetProperty("n").GetInt32();
 
             var ciphertext = Convert.FromBase64String(message.EncryptedPayload);
-            var associatedData = Encoding.UTF8.GetBytes($"{message.SenderId}:{sessionService.CurrentUserId}");
+            var associatedData = BuildAssociatedData(message.SenderId, sessionService.CurrentUserId);
+            LogCrypto("decrypt-ad-hash", $"message={message.Id} ad_hash={ShortHash(associatedData)} rk_pub_hash={ShortHash(ratchetPub)}");
 
-            var plaintextBytes = await sessionManager.DecryptAsync(
-                sessionId, ciphertext, ratchetPub, pn, n, associatedData, cancellationToken);
+            byte[]? plaintextBytes = null;
+            Exception? lastDecryptError = null;
+            var reverseAd = BuildAssociatedData(sessionService.CurrentUserId, message.SenderId);
+            foreach (var candidate in sessionCandidates)
+            {
+                try
+                {
+                    plaintextBytes = await sessionManager.DecryptAsync(
+                        candidate, ciphertext, ratchetPub, pn, n, associatedData, cancellationToken);
+                    LogCrypto("decrypt-dr-success",
+                        $"message={message.Id} session={candidate} n={n} pn={pn} ad=primary");
+                    break;
+                }
+                catch (CryptographicException ex1)
+                {
+                    lastDecryptError = ex1;
+                    try
+                    {
+                        plaintextBytes = await sessionManager.DecryptAsync(
+                            candidate, ciphertext, ratchetPub, pn, n, reverseAd, cancellationToken);
+                        LogCrypto("decrypt-dr-success",
+                            $"message={message.Id} session={candidate} n={n} pn={pn} ad=reverse");
+                        break;
+                    }
+                    catch (CryptographicException ex2)
+                    {
+                        lastDecryptError = ex2;
+                    }
+                }
+            }
+            if (plaintextBytes is null)
+            {
+                if (root.TryGetProperty("noise", out var noiseRetryElement))
+                {
+                    LogCrypto("decrypt-rebuild-retry", $"message={message.Id} attempting responder rebuild after failure");
+                    var senderBundle = await apiClient.GetKeyBundleAsync(message.SenderId, cancellationToken);
+                    if (senderBundle is not null)
+                    {
+                        var retryHeader = new Crypto.NoiseHeader(
+                            Convert.FromBase64String(noiseRetryElement.GetProperty("e_pub").GetString()!),
+                            Convert.FromBase64String(noiseRetryElement.GetProperty("s_pub").GetString()!),
+                            Convert.FromBase64String(noiseRetryElement.GetProperty("sig").GetString()!));
+                        var retrySharedSecret = x3dh.RespondToNoiseSession(
+                            keyPublication.LocalBundle,
+                            senderBundle.IkPublic,
+                            senderBundle.SpkPublic,
+                            senderBundle.SpkSignature,
+                            retryHeader);
+                        await sessionManager.CreateResponderSessionAsync(
+                            sessionId,
+                            retrySharedSecret,
+                            keyPublication.LocalBundle.SpkPrivate,
+                            keyPublication.LocalBundle.SpkPublic,
+                            cancellationToken);
+                        plaintextBytes = await sessionManager.DecryptAsync(
+                            sessionId, ciphertext, ratchetPub, pn, n, associatedData, cancellationToken);
+                        LogCrypto("decrypt-rebuild-retry-success", $"message={message.Id} session={sessionId}");
+                    }
+                }
+            }
+            if (plaintextBytes is null)
+            {
+                throw lastDecryptError ?? new CryptographicException("Decrypt failed for all session-id candidates.");
+            }
 
             var plaintext = Encoding.UTF8.GetString(plaintextBytes);
 
-            // Persist plaintext for FTS5 search index (trigger updates messages_fts automatically)
             await localMessageRepository.SaveMessageAsync(message, (int)message.ProtocolVersion, cancellationToken);
             await localMessageRepository.UpdatePlaintextBodyAsync(message.Id, plaintext, cancellationToken);
+            LogCrypto("decrypt-success", $"message={message.Id} plaintextLen={plaintext.Length}");
 
             return plaintext;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            var hasNoise = false;
+            var n = "n/a";
+            var pn = "n/a";
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(message.MetadataJson))
+                {
+                    using var hintDoc = JsonDocument.Parse(message.MetadataJson);
+                    var hintRoot = hintDoc.RootElement;
+                    hasNoise = hintRoot.TryGetProperty("noise", out _);
+                    if (hintRoot.TryGetProperty("dr", out var drHint))
+                    {
+                        if (drHint.TryGetProperty("n", out var nProp))
+                            n = nProp.GetInt32().ToString(CultureInfo.InvariantCulture);
+                        if (drHint.TryGetProperty("pn", out var pnProp))
+                            pn = pnProp.GetInt32().ToString(CultureInfo.InvariantCulture);
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            LogCrypto("decrypt-failed",
+                $"message={message.Id} sender={message.SenderId} protocol={(int)message.ProtocolVersion} " +
+                $"alg={message.EncryptionAlgorithm} hasMeta={message.MetadataJson is not null} " +
+                $"hasNoise={hasNoise} n={n} pn={pn} keyEnvelope={message.KeyEnvelope ?? "n/a"} " +
+                $"error={ex.GetType().Name}: {ex.Message}");
+
+            if (message.ProtocolVersion == ProtocolVersion.NoiseXX && !hasNoise)
+            {
+                try
+                {
+                    var sid1 = BuildSessionId(message.SenderId, sessionService.CurrentUserId);
+                    var sid2 = BuildSessionId(sessionService.CurrentUserId, message.SenderId);
+                    var sid3 = NormalizeSessionIdEnvelope(message.KeyEnvelope);
+                    var resetCandidates = new[] { sid3, sid1, sid2 }
+                        .Where(x => !string.IsNullOrWhiteSpace(x))
+                        .Where(x => !IsSelfSession(x))
+                        .Distinct(StringComparer.Ordinal);
+                    foreach (var sid in resetCandidates)
+                    {
+                        await sessionManager.ResetSessionAsync(sid!, cancellationToken);
+                        LogCrypto("decrypt-session-reset", $"message={message.Id} session={sid}");
+                    }
+                }
+                catch (Exception resetEx)
+                {
+                    LogCrypto("decrypt-session-reset-failed",
+                        $"message={message.Id} error={resetEx.GetType().Name}: {resetEx.Message}");
+                }
+            }
             return "[Unable to decrypt]";
         }
     }

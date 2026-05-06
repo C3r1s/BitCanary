@@ -1,3 +1,4 @@
+// Автотест BitCanary: проверка «X3DHServiceTests».
 using System.Security.Cryptography;
 using Messenger.Client.Avalonia.Services.Crypto;
 using NSec.Cryptography;
@@ -14,14 +15,10 @@ public class X3DHServiceTests
     {
         var bundle = _service.GenerateKeyBundle();
 
-        // IK public is Ed25519 = 32 bytes
         Assert.Equal(32, bundle.IkPublic.Length);
-        // SPK public is X25519 = 32 bytes
         Assert.Equal(32, bundle.SpkPublic.Length);
-        // SPK signature is Ed25519 = 64 bytes
         Assert.Equal(64, bundle.SpkSignature.Length);
 
-        // Verify SPK signature using Ed25519 IK public
         var ikPub = PublicKey.Import(SignatureAlgorithm.Ed25519, bundle.IkPublic, KeyBlobFormat.RawPublicKey);
         Assert.True(SignatureAlgorithm.Ed25519.Verify(ikPub, bundle.SpkPublic, bundle.SpkSignature));
     }
@@ -42,15 +39,11 @@ public class X3DHServiceTests
     [Fact]
     public void TwoPartyHandshake_WithOpk_ProducesIdenticalSharedSecret()
     {
-        // Alice (initiator) bundle
         var aliceBundle = _service.GenerateKeyBundle();
-        // Bob (responder) bundle
         var bobBundle = _service.GenerateKeyBundle();
-        // Bob's OPK
         var bobOpks = _service.GenerateOneTimePreKeys(1);
         var bobOpkId = Guid.NewGuid();
 
-        // Alice initiates with Bob's public material
         var (aliceSk, header) = _service.InitiateSession(
             aliceBundle,
             bobBundle.IkPublic,
@@ -59,7 +52,6 @@ public class X3DHServiceTests
             bobOpks[0].Public,
             bobOpkId);
 
-        // Bob responds with his private material and Alice's header
         var bobSk = _service.RespondToSession(
             bobBundle,
             bobOpks[0].Private,
@@ -76,7 +68,6 @@ public class X3DHServiceTests
         var aliceBundle = _service.GenerateKeyBundle();
         var bobBundle = _service.GenerateKeyBundle();
 
-        // No OPK
         var (aliceSk, header) = _service.InitiateSession(
             aliceBundle,
             bobBundle.IkPublic,
@@ -101,7 +92,6 @@ public class X3DHServiceTests
         var aliceBundle = _service.GenerateKeyBundle();
         var bobBundle = _service.GenerateKeyBundle();
 
-        // Corrupt the SPK signature
         var badSignature = new byte[64];
         RandomNumberGenerator.Fill(badSignature);
 
@@ -134,7 +124,6 @@ public class X3DHServiceTests
             secrets.Add(Convert.ToHexString(sk));
         }
 
-        // Each ephemeral key is random → distinct secrets
         Assert.Equal(3, secrets.Count);
     }
 }

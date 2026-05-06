@@ -1,3 +1,4 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «IThemeService».
 using Messenger.Shared.Contracts;
 
 namespace Messenger.Client.Avalonia.Services;

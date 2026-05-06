@@ -1,3 +1,4 @@
+// HTTP API отправки сообщений и взаимодействия с лентой сообщений.
 using Messenger.Application.Abstractions;
 using Messenger.Application.Messages;
 using Messenger.Shared.Contracts.Dtos;

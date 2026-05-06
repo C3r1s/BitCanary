@@ -1,3 +1,4 @@
+// HTTP API чатов: список, создание, участники, метаданные и очистка истории.
 using Messenger.Application.Abstractions;
 using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
@@ -19,9 +20,17 @@ public sealed class ChatsController(IChatService chatService, IMessageService me
     public Task<ChatSummaryDto> CreateChat(CreateChatRequest request, CancellationToken cancellationToken) =>
         chatService.CreateChatAsync(request, cancellationToken);
 
+    [HttpDelete("{chatId:guid}")]
+    public Task DeleteChat(Guid chatId, CancellationToken cancellationToken) =>
+        chatService.DeleteChatAsync(chatId, cancellationToken);
+
     [HttpGet("{chatId:guid}/messages")]
     public Task<IReadOnlyCollection<MessageDto>> GetMessages(Guid chatId, CancellationToken cancellationToken) =>
         messageService.GetMessagesAsync(chatId, cancellationToken);
+
+    [HttpDelete("{chatId:guid}/messages")]
+    public Task ClearMessages(Guid chatId, CancellationToken cancellationToken) =>
+        messageService.ClearChatMessagesAsync(chatId, cancellationToken);
 
     [HttpPost("{chatId:guid}/members")]
     public Task<ChatSummaryDto> AddMember(Guid chatId, AddMemberRequest request, CancellationToken ct)

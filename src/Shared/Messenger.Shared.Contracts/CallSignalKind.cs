@@ -1,3 +1,4 @@
+// Общее перечисление/константа BitCanary: «CallSignalKind» (клиент + сервер).
 namespace Messenger.Shared.Contracts;
 
 public enum CallSignalKind

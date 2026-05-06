@@ -1,3 +1,4 @@
+// DTO передачи «MessageContracts» между API BitCanary и клиентами.
 using Messenger.Shared.Contracts;
 
 namespace Messenger.Shared.Contracts.Dtos;
@@ -27,7 +28,8 @@ public sealed record MessageDto(
     Guid? ReplyToMessageId,
     string? MetadataJson,
     DateTimeOffset CreatedAtUtc,
-    ProtocolVersion ProtocolVersion = ProtocolVersion.LegacyAes);
+    ProtocolVersion ProtocolVersion = ProtocolVersion.LegacyAes,
+    MessageStatus Status = MessageStatus.Delivered);
 
 public sealed record TypingIndicatorDto(
     Guid ChatId,

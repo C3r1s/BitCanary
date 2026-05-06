@@ -1,4 +1,7 @@
+// Состояние и команды UI BitCanary для «GroupInfoViewModel».
 using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Messenger.Shared.Contracts;
@@ -12,6 +15,7 @@ public sealed partial class GroupInfoViewModel : ViewModelBase
     private readonly Func<Guid, Guid, Task> _removeMemberAsync;
     private readonly Func<Guid, Guid, ChatRole, Task> _updateRoleAsync;
     private readonly Func<Guid, UpdateChatRequest, Task<ChatSummaryDto>> _updateChatAsync;
+    private readonly Func<string, CancellationToken, Task<IReadOnlyCollection<UserProfileDto>>> _searchUsersAsync;
     private readonly Action _closeAction;
 
     private Guid _chatId;
@@ -25,16 +29,21 @@ public sealed partial class GroupInfoViewModel : ViewModelBase
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private bool _hasError;
     [ObservableProperty] private string _errorMessage = string.Empty;
+    [ObservableProperty] private string _inviteUsername = string.Empty;
 
     public ObservableCollection<GroupMemberItemViewModel> Members { get; } = new();
 
     public bool IsAdmin { get; private set; }
     public bool IsOwner { get; private set; }
+    public bool CanShowEditButton => IsAdmin && !IsEditing;
+    public bool CanShowLeaveButton => !IsAdmin && !IsEditing;
     public int MemberCount => Members.Count;
 
     public IRelayCommand EditCommand { get; }
     public IAsyncRelayCommand SaveCommand { get; }
     public IRelayCommand CancelEditCommand { get; }
+    public IAsyncRelayCommand LeaveGroupCommand { get; }
+    public IAsyncRelayCommand AddMemberCommand { get; }
     public IRelayCommand CloseCommand { get; }
 
     public GroupInfoViewModel(
@@ -42,12 +51,14 @@ public sealed partial class GroupInfoViewModel : ViewModelBase
         Func<Guid, Guid, Task> removeMemberAsync,
         Func<Guid, Guid, ChatRole, Task> updateRoleAsync,
         Func<Guid, UpdateChatRequest, Task<ChatSummaryDto>> updateChatAsync,
+        Func<string, CancellationToken, Task<IReadOnlyCollection<UserProfileDto>>> searchUsersAsync,
         Action closeAction)
     {
         _addMemberAsync = addMemberAsync;
         _removeMemberAsync = removeMemberAsync;
         _updateRoleAsync = updateRoleAsync;
         _updateChatAsync = updateChatAsync;
+        _searchUsersAsync = searchUsersAsync;
         _closeAction = closeAction;
 
         EditCommand = new RelayCommand(
@@ -65,7 +76,6 @@ public sealed partial class GroupInfoViewModel : ViewModelBase
                     new UpdateChatRequest(
                         GroupName.Trim().Length > 0 ? GroupName.Trim() : null,
                         Description));
-                // Reload from updated summary
                 await LoadAsync(updated, _currentUserId);
                 IsEditing = false;
             }
@@ -89,7 +99,71 @@ public sealed partial class GroupInfoViewModel : ViewModelBase
             ErrorMessage = string.Empty;
         });
 
+        LeaveGroupCommand = new AsyncRelayCommand(
+            () => RemoveMemberAndReloadAsync(_currentUserId),
+            () => !IsAdmin && !IsBusy);
+
+        AddMemberCommand = new AsyncRelayCommand(AddMemberAsyncCore, () => IsAdmin && !IsBusy);
+
         CloseCommand = new RelayCommand(_closeAction);
+    }
+
+    private async Task AddMemberAsyncCore()
+    {
+        var query = InviteUsername.Trim();
+        if (string.IsNullOrEmpty(query))
+        {
+            HasError = true;
+            ErrorMessage = "enter a username";
+            return;
+        }
+
+        IsBusy = true;
+        HasError = false;
+        ErrorMessage = string.Empty;
+        try
+        {
+            var results = await _searchUsersAsync(query, CancellationToken.None).ConfigureAwait(true);
+            var list = results.ToList();
+            var match = list.FirstOrDefault(u =>
+                string.Equals(u.UserName, query, StringComparison.OrdinalIgnoreCase));
+            if (match is null && list.Count == 1)
+                match = list[0];
+
+            if (match is null)
+            {
+                HasError = true;
+                ErrorMessage = "user not found or ambiguous; type the exact username";
+                return;
+            }
+
+            if (match.Id == _currentUserId)
+            {
+                HasError = true;
+                ErrorMessage = "cannot add yourself";
+                return;
+            }
+
+            if (Members.Any(m => m.UserId == match.Id))
+            {
+                HasError = true;
+                ErrorMessage = "user is already a member";
+                return;
+            }
+
+            var updated = await _addMemberAsync(_chatId, match.Id).ConfigureAwait(true);
+            InviteUsername = string.Empty;
+            await LoadAsync(updated, _currentUserId).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            HasError = true;
+            ErrorMessage = ex.Message.ToLower(CultureInfo.InvariantCulture);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
     }
 
     public async Task LoadAsync(ChatSummaryDto chat, Guid currentUserId)
@@ -105,11 +179,15 @@ public sealed partial class GroupInfoViewModel : ViewModelBase
         var currentMember = chat.Members.FirstOrDefault(x => x.UserId == currentUserId);
         var callerRole = currentMember?.Role ?? ChatRole.Member;
 
-        // IsAdmin means the user can perform admin actions (Owner is also Admin+)
         IsAdmin = callerRole <= ChatRole.Admin;
         IsOwner = callerRole == ChatRole.Owner;
         OnPropertyChanged(nameof(IsAdmin));
         OnPropertyChanged(nameof(IsOwner));
+        OnPropertyChanged(nameof(CanShowEditButton));
+        OnPropertyChanged(nameof(CanShowLeaveButton));
+        EditCommand.NotifyCanExecuteChanged();
+        LeaveGroupCommand.NotifyCanExecuteChanged();
+        AddMemberCommand.NotifyCanExecuteChanged();
 
         Members.Clear();
         foreach (var member in chat.Members.OrderBy(x => x.Role))
@@ -130,6 +208,19 @@ public sealed partial class GroupInfoViewModel : ViewModelBase
         OnPropertyChanged(nameof(MemberCount));
     }
 
+    partial void OnIsBusyChanged(bool value)
+    {
+        SaveCommand.NotifyCanExecuteChanged();
+        LeaveGroupCommand.NotifyCanExecuteChanged();
+        AddMemberCommand.NotifyCanExecuteChanged();
+    }
+
+    partial void OnIsEditingChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanShowEditButton));
+        OnPropertyChanged(nameof(CanShowLeaveButton));
+    }
+
     private async Task RemoveMemberAndReloadAsync(Guid userId)
     {
         IsBusy = true;
@@ -137,20 +228,18 @@ public sealed partial class GroupInfoViewModel : ViewModelBase
         try
         {
             await _removeMemberAsync(_chatId, userId);
-            // After leaving, close the panel (caller was removed or left)
             var wasCurrentUser = userId == _currentUserId;
-            // Signal that a reload is needed by closing the panel on leave
             if (wasCurrentUser)
             {
                 _closeAction();
             }
             else
             {
-                // FIX-05: remove the member from the observable collection so the UI reflects the removal immediately.
                 var item = Members.FirstOrDefault(m => m.UserId == userId);
                 if (item is not null)
                 {
                     Members.Remove(item);
+                    OnPropertyChanged(nameof(MemberCount));
                 }
             }
         }

@@ -1,3 +1,4 @@
+// Проверка подписи signed pre-key в криптографическом бандле.
 using Messenger.Application.Abstractions;
 using NSec.Cryptography;
 

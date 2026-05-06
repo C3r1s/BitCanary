@@ -1,3 +1,4 @@
+// Состояние и команды UI BitCanary для «ChatListItemViewModel».
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Messenger.Shared.Contracts;
@@ -19,32 +20,23 @@ public sealed partial class ChatListItemViewModel : ViewModelBase
     public required string Title { get; init; }
     public required ChatType Type { get; init; }
 
-    /// <summary>
-    /// UserId of the peer in a 1-to-1 chat. Guid.Empty for group chats.
-    /// Used to determine the recipient when sending encrypted messages.
-    /// </summary>
     public Guid PeerUserId { get; init; }
 
-    /// <summary>True when this chat is a group or channel (not a direct chat).</summary>
     public bool IsGroupChat => Type != ChatType.Direct;
 
-    /// <summary>Number of members in the chat (from ChatSummaryDto.Members.Count).</summary>
     public int MemberCount { get; init; }
 
     [ObservableProperty]
     private string _subtitle = string.Empty;
 
-    /// <summary>Formatted relative timestamp string (e.g. "5m ago", "14:32", "Mon", "Mar 26").</summary>
     [ObservableProperty]
     private string _lastActivity = string.Empty;
 
     [ObservableProperty]
     private int _unreadCount;
 
-    /// <summary>True when <see cref="UnreadCount"/> is greater than zero; drives unread badge visibility.</summary>
     public bool HasUnreadMessages => UnreadCount > 0;
 
-    /// <summary>Called by CommunityToolkit.Mvvm when UnreadCount changes; raises HasUnreadMessages notification.</summary>
     partial void OnUnreadCountChanged(int value)
     {
         OnPropertyChanged(nameof(HasUnreadMessages));

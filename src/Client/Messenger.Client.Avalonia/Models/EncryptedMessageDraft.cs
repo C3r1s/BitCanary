@@ -1,3 +1,4 @@
+// Модель UI/отправки BitCanary: «EncryptedMessageDraft».
 using Messenger.Shared.Contracts;
 
 namespace Messenger.Client.Avalonia.Models;

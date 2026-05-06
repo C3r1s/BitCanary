@@ -1,8 +1,10 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «ThemeService».
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Avalonia.Threading;
 using Messenger.Shared.Contracts;
 
 namespace Messenger.Client.Avalonia.Services;
@@ -15,6 +17,12 @@ public sealed class ThemeService : IThemeService
 
     public void Apply(ThemePreference themePreference)
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => Apply(themePreference));
+            return;
+        }
+
         CurrentTheme = themePreference;
 
         if (Application.Current is null)
@@ -24,9 +32,7 @@ public sealed class ThemeService : IThemeService
 
         if (themePreference != ThemePreference.Terminal)
         {
-            // Remove any existing terminal dictionaries
             RemoveTerminalDictionaries();
-            // Restore default font
             RestoreDefaultFont();
         }
 
@@ -39,12 +45,14 @@ public sealed class ThemeService : IThemeService
         };
     }
 
-    /// <summary>
-    /// Loads and applies one of the three Terminal color ResourceDictionaries.
-    /// Call this when Terminal theme is active and the user picks a sub-scheme.
-    /// </summary>
     public void ApplyTerminalScheme(TerminalColorScheme scheme)
     {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => ApplyTerminalScheme(scheme));
+            return;
+        }
+
         if (Application.Current is null) return;
 
         RemoveTerminalDictionaries();
@@ -58,14 +66,16 @@ public sealed class ThemeService : IThemeService
 
         var uri = new Uri($"avares://Messenger.Client.Avalonia/Assets/Themes/{schemeName}.axaml");
         var dict = (ResourceDictionary)AvaloniaXamlLoader.Load(uri);
-        Application.Current.Resources.MergedDictionaries.Add(dict);
 
-        // Override font family to monospace
-        Application.Current.Resources["ContentControlThemeFontFamily"] =
-            new FontFamily("Fixedsys, Terminal, 'Lucida Console', 'Courier New', monospace");
+        foreach (var key in dict.Keys)
+        {
+            if (dict.TryGetResource(key, null, out var value))
+            {
+                Application.Current.Resources[key] = value;
+            }
+        }
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
 
     private static void RemoveTerminalDictionaries()
     {
@@ -86,7 +96,6 @@ public sealed class ThemeService : IThemeService
     {
         if (Application.Current is null) return;
 
-        // Remove the overridden font key so the default Fluent theme font takes over again
         if (Application.Current.Resources.ContainsKey("ContentControlThemeFontFamily"))
         {
             Application.Current.Resources.Remove("ContentControlThemeFontFamily");

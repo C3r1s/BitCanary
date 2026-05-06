@@ -1,23 +1,17 @@
+// Сервис клиента BitCanary: сеть, кэш, медиа — «LocalMessageRepository».
 using Messenger.Shared.Contracts;
 using Messenger.Shared.Contracts.Dtos;
 using Microsoft.Data.Sqlite;
 
 namespace Messenger.Client.Avalonia.Services;
 
-/// <summary>
-/// SQLite-backed implementation of <see cref="ILocalMessageRepository"/>.
-/// All reads and writes are scoped to <see cref="IClientSessionService.CurrentUserId"/>
-/// via the <c>owner_user_id</c> column (added in schema V5).
-/// </summary>
 public sealed class LocalMessageRepository(
     SqliteConnection connection,
     IClientSessionService sessionService) : ILocalMessageRepository
 {
     private string OwnerId => sessionService.CurrentUserId.ToString();
 
-    // ── Messages ──────────────────────────────────────────────────────────
 
-    /// <inheritdoc/>
     public async Task SaveMessageAsync(
         MessageDto message,
         int protocolVersion = 0,
@@ -27,10 +21,10 @@ public sealed class LocalMessageRepository(
         cmd.CommandText = """
             INSERT OR IGNORE INTO messages
                 (id, owner_user_id, chat_id, sender_id, client_message_id, protocol_version,
-                 encrypted_payload, key_envelope, encryption_algorithm, sent_at)
+                 encrypted_payload, key_envelope, encryption_algorithm, sent_at, status)
             VALUES
                 (@id, @ownerId, @chatId, @senderId, @clientMessageId, @protocolVersion,
-                 @encryptedPayload, @keyEnvelope, @encryptionAlgorithm, @sentAt)
+                 @encryptedPayload, @keyEnvelope, @encryptionAlgorithm, @sentAt, @status)
             """;
         cmd.Parameters.AddWithValue("@id", message.Id.ToString());
         cmd.Parameters.AddWithValue("@ownerId", OwnerId);
@@ -42,10 +36,10 @@ public sealed class LocalMessageRepository(
         cmd.Parameters.AddWithValue("@keyEnvelope", message.KeyEnvelope);
         cmd.Parameters.AddWithValue("@encryptionAlgorithm", message.EncryptionAlgorithm);
         cmd.Parameters.AddWithValue("@sentAt", message.CreatedAtUtc.ToString("O"));
+        cmd.Parameters.AddWithValue("@status", (int)message.Status);
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    /// <inheritdoc/>
     public async Task<IReadOnlyList<MessageDto>> GetMessagesAsync(
         Guid chatId,
         CancellationToken cancellationToken = default)
@@ -53,7 +47,7 @@ public sealed class LocalMessageRepository(
         await using var cmd = connection.CreateCommand();
         cmd.CommandText = """
             SELECT id, chat_id, sender_id,
-                   encrypted_payload, key_envelope, encryption_algorithm, sent_at
+                   encrypted_payload, key_envelope, encryption_algorithm, sent_at, status, protocol_version
             FROM messages
             WHERE chat_id = @chatId
               AND owner_user_id = @ownerId
@@ -81,12 +75,13 @@ public sealed class LocalMessageRepository(
                 CreatedAtUtc: DateTimeOffset.Parse(
                     reader.GetString(6),
                     null,
-                    System.Globalization.DateTimeStyles.RoundtripKind)));
+                    System.Globalization.DateTimeStyles.RoundtripKind),
+                ProtocolVersion: (ProtocolVersion)reader.GetInt32(8),
+                Status: (MessageStatus)reader.GetInt32(7)));
         }
         return results;
     }
 
-    /// <inheritdoc/>
     public async Task<bool> MessageExistsAsync(
         Guid clientMessageId,
         CancellationToken cancellationToken = default)
@@ -103,7 +98,6 @@ public sealed class LocalMessageRepository(
         return count > 0;
     }
 
-    /// <inheritdoc/>
     public async Task UpdatePlaintextBodyAsync(
         Guid messageId,
         string plaintextBody,
@@ -123,9 +117,28 @@ public sealed class LocalMessageRepository(
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    // ── Chats ─────────────────────────────────────────────────────────────
+    public async Task<string?> GetPlaintextBodyAsync(
+        Guid messageId,
+        CancellationToken ct = default)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.CommandText = """
+            SELECT plaintext_body
+            FROM messages
+            WHERE id = @id
+              AND owner_user_id = @ownerId
+            LIMIT 1
+            """;
+        cmd.Parameters.AddWithValue("@id", messageId.ToString());
+        cmd.Parameters.AddWithValue("@ownerId", OwnerId);
 
-    /// <inheritdoc/>
+        var result = await cmd.ExecuteScalarAsync(ct);
+        if (result is null || result is DBNull) return null;
+        var text = result as string;
+        return string.IsNullOrEmpty(text) ? null : text;
+    }
+
+
     public async Task UpsertChatAsync(
         ChatSummaryDto chat,
         CancellationToken cancellationToken = default)
@@ -150,7 +163,6 @@ public sealed class LocalMessageRepository(
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    /// <inheritdoc/>
     public async Task ResetUnreadCountAsync(
         Guid chatId,
         CancellationToken cancellationToken = default)
@@ -166,7 +178,6 @@ public sealed class LocalMessageRepository(
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    /// <inheritdoc/>
     public async Task UpdateMessageStatusAsync(
         Guid messageId,
         MessageStatus status,
@@ -185,7 +196,6 @@ public sealed class LocalMessageRepository(
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    /// <inheritdoc/>
     public async Task MarkMessagesReadAsync(
         Guid chatId,
         Guid currentUserId,
@@ -207,10 +217,8 @@ public sealed class LocalMessageRepository(
         await cmd.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    /// <inheritdoc/>
     public async Task DeleteChatAsync(Guid chatId, CancellationToken ct = default)
     {
-        // Delete messages first — FK constraint requires this order
         await using var cmd1 = connection.CreateCommand();
         cmd1.CommandText = """
             DELETE FROM messages
@@ -232,7 +240,6 @@ public sealed class LocalMessageRepository(
         await cmd2.ExecuteNonQueryAsync(ct);
     }
 
-    /// <inheritdoc/>
     public async Task ClearMessagesAsync(Guid chatId, CancellationToken ct = default)
     {
         await using var cmd = connection.CreateCommand();
@@ -246,7 +253,6 @@ public sealed class LocalMessageRepository(
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    /// <inheritdoc/>
     public async Task<IReadOnlyList<ChatSummaryDto>> GetChatsAsync(
         CancellationToken cancellationToken = default)
     {
